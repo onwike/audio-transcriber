@@ -30,12 +30,15 @@ cp .env.example .env
 ./run.sh
 ```
 
-For diarization, before first run, accept the gating terms on both:
+For diarization, before first run, accept the gating terms on **all three** pyannote models:
 
 - https://huggingface.co/pyannote/speaker-diarization-3.1
 - https://huggingface.co/pyannote/segmentation-3.0
+- https://huggingface.co/pyannote/speaker-diarization-community-1
 
-Open http://127.0.0.1:7860 in your browser. First launch downloads ~3 GB of model weights and takes 5–10 minutes; subsequent launches start in seconds.
+The startup preflight check verifies your Anthropic key, HuggingFace token, gating acceptance on all three models, and WeasyPrint's native deps in <3 seconds — *before* any model weights are downloaded. Every missing piece is reported in one banner so you don't fix-then-retry-then-fix.
+
+Open http://127.0.0.1:7860 in your browser. Once preflight passes, first launch downloads ~3 GB of model weights and takes 5–10 minutes; subsequent launches start in seconds.
 
 ---
 

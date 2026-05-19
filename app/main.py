@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import EXPORTS_DIR, PROJECT_ROOT, get_settings
+from app.preflight import format_preflight_report, run_preflight
 from app.routes.jobs import router as jobs_router
 
 STATIC_DIR = PROJECT_ROOT / "app" / "static"
@@ -23,25 +24,26 @@ logger = logging.getLogger("app")
 async def lifespan(app: FastAPI):
     s = get_settings()
 
-    if not s.anthropic_api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in."
-        )
-
+    # ─── Cheap static checks (no network, no downloads) ──────────────
     if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
         raise RuntimeError(
             "ffmpeg/ffprobe not found on PATH. Install with: brew install ffmpeg"
         )
 
-    if s.enable_diarization and not s.huggingface_token:
+    # ─── Preflight: credentials, gating, native libs ─────────────────
+    # Runs before any heavy model download so the user sees every
+    # actionable issue in one pass instead of fix-one-then-retry cycles.
+    logger.info("Running preflight checks (Anthropic, HuggingFace, WeasyPrint)…")
+    errors = await run_preflight(s)
+    if errors:
+        logger.error(format_preflight_report(errors))
         raise RuntimeError(
-            "ENABLE_DIARIZATION=true but HUGGINGFACE_TOKEN is missing. "
-            "Get one at https://huggingface.co/settings/tokens then accept gating at "
-            "https://huggingface.co/pyannote/speaker-diarization-3.1 and "
-            "https://huggingface.co/pyannote/segmentation-3.0"
+            f"Preflight failed: {len(errors)} issue(s). See report above."
         )
+    logger.info("Preflight passed ✓")
 
-    # Warm-load models off the event loop. First run downloads ~3 GB for large-v3.
+    # ─── Warm-load models off the event loop ─────────────────────────
+    # Only reached if preflight cleared. First run downloads ~3 GB.
     from app.transcribe import load_diarizer, load_whisper
 
     logger.info("Warming up models (first run downloads model weights — may take several minutes)…")

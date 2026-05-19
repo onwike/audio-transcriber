@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.config import EXPORTS_DIR, TEMP_DIR
-from app.models import Job, JobStatus
+from app.models import Job, JobStatus, PhaseRun
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,35 @@ class JobStore:
     def list_all(self) -> list[Job]:
         """All jobs sorted newest-first."""
         return sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True)
+
+    def phase_start(self, job_id: str, phase: str) -> None:
+        """Record the start of a pipeline phase. Resets duration if re-entered
+        (e.g. polish is re-run after a re-polish request)."""
+        job = self._jobs.get(job_id)
+        if job is None:
+            return
+        runs = dict(job.phase_runs)
+        runs[phase] = PhaseRun(started_at=datetime.now(timezone.utc))
+        self.update(job_id, phase_runs=runs)
+
+    def phase_end(self, job_id: str, phase: str) -> None:
+        """Record completion of a pipeline phase. No-op if phase wasn't started
+        or already has a duration recorded."""
+        job = self._jobs.get(job_id)
+        if job is None:
+            return
+        run = job.phase_runs.get(phase)
+        if run is None or run.duration_seconds is not None:
+            return
+        duration = (datetime.now(timezone.utc) - run.started_at).total_seconds()
+        runs = dict(job.phase_runs)
+        runs[phase] = PhaseRun(started_at=run.started_at, duration_seconds=duration)
+        self.update(job_id, phase_runs=runs)
+
+    def mark_completed(self, job_id: str) -> None:
+        """Stamp the pipeline-finished time (any outcome — done, error, cancelled)."""
+        if self._jobs.get(job_id) is not None:
+            self.update(job_id, completed_at=datetime.now(timezone.utc))
 
     def cleanup(self, job_id: str) -> None:
         """Delete everything related to a job: work_dir + exports + memory."""

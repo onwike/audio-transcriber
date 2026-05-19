@@ -137,8 +137,15 @@ main {
 .history-meta {
   color: var(--muted);
   font-size: 9.5pt;
-  margin: 0 0 0.8em;
+  margin: 0 0 0.4em;
   letter-spacing: 0.02em;
+}
+.history-timings {
+  color: #999;
+  font-size: 8.5pt;
+  margin: 0 0 0.8em;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
 }
 .history-meta span + span::before {
   content: "·";

@@ -31,6 +31,16 @@ class SpeakerHint(BaseModel):
     description: str = ""
 
 
+class PhaseRun(BaseModel):
+    """When a pipeline phase started and how long it ran.
+
+    duration_seconds is None while the phase is still in progress (or if the
+    pipeline crashed mid-phase). UI should treat None as 'unknown'.
+    """
+    started_at: datetime
+    duration_seconds: float | None = None
+
+
 class Job(BaseModel):
     id: str
     status: JobStatus = JobStatus.PENDING
@@ -48,6 +58,8 @@ class Job(BaseModel):
     title: str | None = None  # populated when polish completes
     export_md_filename: str | None = None
     export_pdf_filename: str | None = None
+    phase_runs: dict[str, PhaseRun] = Field(default_factory=dict)  # per-phase timing
+    completed_at: datetime | None = None  # when the pipeline finished (any outcome)
 
 
 class PolishedParagraph(BaseModel):

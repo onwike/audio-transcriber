@@ -52,6 +52,25 @@
     return `${ss}s`;
   }
 
+  function fmtPhaseTimings(phaseRuns) {
+    if (!phaseRuns) return null;
+    const order = ['ingest', 'transcribe', 'polish', 'export'];
+    const parts = [];
+    let total = 0;
+    let countWithDuration = 0;
+    for (const phase of order) {
+      const run = phaseRuns[phase];
+      if (run && typeof run.duration_seconds === 'number') {
+        parts.push(`${phase} ${fmtDuration(run.duration_seconds)}`);
+        total += run.duration_seconds;
+        countWithDuration += 1;
+      }
+    }
+    if (countWithDuration === 0) return null;
+    if (countWithDuration > 1) parts.push(`total ${fmtDuration(total)}`);
+    return parts.join(' · ');
+  }
+
   function shortenClaudeModel(name) {
     // claude-haiku-4-5-20251001 → "haiku 4.5"
     // claude-sonnet-4-6-20251015 → "sonnet 4.6"
@@ -441,6 +460,15 @@
       meta.append(span);
     }
     li.append(meta);
+
+    // Per-phase timings line (only shown when there's data)
+    const timings = fmtPhaseTimings(job.phase_runs);
+    if (timings) {
+      const t = document.createElement('p');
+      t.className = 'history-timings';
+      t.textContent = timings;
+      li.append(t);
+    }
 
     // Error detail
     if (job.status === 'error' && job.error) {

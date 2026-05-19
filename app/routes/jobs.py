@@ -97,6 +97,8 @@ async def create_job(
         expected_speakers=expected_speakers,
         speaker_hints=parsed_hints,
     )
+    # Start timing the ingest phase (upload-to-disk + ffprobe + ffmpeg normalize).
+    store.phase_start(job.id, JobPhase.INGEST.value)
     work_dir = store.dir(job.id)
     original_path = work_dir / f"original{ext}"
 
@@ -132,6 +134,7 @@ async def create_job(
 
         normalized_path = work_dir / "normalized.wav"
         await normalize_to_wav(original_path, normalized_path)
+        store.phase_end(job.id, JobPhase.INGEST.value)
 
         updated = store.update(
             job.id,

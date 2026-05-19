@@ -56,6 +56,7 @@ async def run_pipeline(job_id: str) -> None:
             check_cancel()
 
             # ── Transcribe ──────────────────────────────────────────────
+            store.phase_start(job_id, JobPhase.TRANSCRIBE.value)
             emit(JobPhase.TRANSCRIBE, 0, "Loading audio into Whisper…")
 
             def on_progress(p: float) -> None:
@@ -95,11 +96,13 @@ async def run_pipeline(job_id: str) -> None:
 
             save_transcript(transcript_path, segments, info)
             check_cancel()
+            store.phase_end(job_id, JobPhase.TRANSCRIBE.value)
 
             # ── Polish ──────────────────────────────────────────────────
             def on_polish(pct: int, msg: str) -> None:
                 emit(JobPhase.POLISH, pct, msg)
 
+            store.phase_start(job_id, JobPhase.POLISH.value)
             emit(JobPhase.POLISH, 0, "Polishing transcript with Claude…")
             hints = [h.model_dump() for h in (job_state.speaker_hints if job_state else [])]
             polished = await polish(
@@ -111,8 +114,10 @@ async def run_pipeline(job_id: str) -> None:
             save_polished(work_dir / "polished.json", polished)
             emit(JobPhase.POLISH, 100, f"Polished: «{polished.title}»")
             check_cancel()
+            store.phase_end(job_id, JobPhase.POLISH.value)
 
             # ── Export to MD + PDF ──────────────────────────────────────
+            store.phase_start(job_id, JobPhase.EXPORT.value)
             emit(JobPhase.EXPORT, 0, "Rendering Markdown + PDF…")
             md_path, pdf_path = await asyncio.to_thread(export_md_and_pdf, polished)
             store.update(
@@ -122,7 +127,9 @@ async def run_pipeline(job_id: str) -> None:
                 export_pdf_filename=pdf_path.name,
             )
             emit(JobPhase.EXPORT, 100, f"Exported {md_path.name} and {pdf_path.name}")
+            store.phase_end(job_id, JobPhase.EXPORT.value)
 
+            store.mark_completed(job_id)
             store.update(job_id, status=JobStatus.DONE)
             bus.publish(job_id, ProgressEvent(
                 phase=JobPhase.EXPORT.value,
@@ -135,6 +142,7 @@ async def run_pipeline(job_id: str) -> None:
             logger.info("Pipeline cancelled for job %s", job_id)
             current = store.get(job_id)
             phase = (current.phase if current else JobPhase.TRANSCRIBE) or JobPhase.TRANSCRIBE
+            store.mark_completed(job_id)
             store.update(job_id, status=JobStatus.CANCELLED, message="Cancelled by user")
             bus.publish(job_id, ProgressEvent(
                 phase=phase.value,
@@ -145,6 +153,7 @@ async def run_pipeline(job_id: str) -> None:
 
         except Exception as e:
             logger.exception("Pipeline failed for job %s", job_id)
+            store.mark_completed(job_id)
             store.update(job_id, status=JobStatus.ERROR, error=str(e))
             bus.publish(job_id, ProgressEvent(
                 phase=(store.get(job_id).phase or JobPhase.TRANSCRIBE).value,
@@ -181,6 +190,7 @@ async def run_polish_only(job_id: str) -> None:
             def on_polish(pct: int, msg: str) -> None:
                 emit(JobPhase.POLISH, pct, msg)
 
+            store.phase_start(job_id, JobPhase.POLISH.value)
             emit(JobPhase.POLISH, 0, "Re-polishing transcript with Claude…")
             job_state = store.get(job_id)
             hints = [h.model_dump() for h in (job_state.speaker_hints if job_state else [])]
@@ -192,7 +202,9 @@ async def run_polish_only(job_id: str) -> None:
             )
             save_polished(work_dir / "polished.json", polished)
             emit(JobPhase.POLISH, 100, f"Polished: «{polished.title}»")
+            store.phase_end(job_id, JobPhase.POLISH.value)
 
+            store.phase_start(job_id, JobPhase.EXPORT.value)
             emit(JobPhase.EXPORT, 0, "Re-rendering Markdown + PDF…")
             md_path, pdf_path = await asyncio.to_thread(export_md_and_pdf, polished)
             store.update(
@@ -202,7 +214,9 @@ async def run_polish_only(job_id: str) -> None:
                 export_pdf_filename=pdf_path.name,
             )
             emit(JobPhase.EXPORT, 100, f"Exported {md_path.name} and {pdf_path.name}")
+            store.phase_end(job_id, JobPhase.EXPORT.value)
 
+            store.mark_completed(job_id)
             store.update(job_id, status=JobStatus.DONE)
             bus.publish(job_id, ProgressEvent(
                 phase=JobPhase.EXPORT.value,
@@ -215,6 +229,7 @@ async def run_polish_only(job_id: str) -> None:
             logger.info("Re-polish cancelled for job %s", job_id)
             current = store.get(job_id)
             phase = (current.phase if current else JobPhase.POLISH) or JobPhase.POLISH
+            store.mark_completed(job_id)
             store.update(job_id, status=JobStatus.CANCELLED, message="Cancelled by user")
             bus.publish(job_id, ProgressEvent(
                 phase=phase.value,
@@ -225,6 +240,7 @@ async def run_polish_only(job_id: str) -> None:
 
         except Exception as e:
             logger.exception("Re-polish failed for job %s", job_id)
+            store.mark_completed(job_id)
             store.update(job_id, status=JobStatus.ERROR, error=str(e))
             bus.publish(job_id, ProgressEvent(
                 phase=JobPhase.POLISH.value,

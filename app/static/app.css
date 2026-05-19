@@ -163,6 +163,19 @@ main {
   margin: 0.5em 0 0;
   letter-spacing: 0.04em;
 }
+.progress-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5em;
+  margin-top: 1.8em;
+}
+.phases li.paused .phase-dot {
+  border-color: var(--muted);
+  background: white;
+}
+.phases li.paused {
+  color: var(--muted);
+}
 
 /* ───── Result ───── */
 .result-actions {

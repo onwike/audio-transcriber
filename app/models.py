@@ -9,8 +9,14 @@ from pydantic import BaseModel
 class JobStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
+    PAUSED = "paused"
     DONE = "done"
     ERROR = "error"
+    CANCELLED = "cancelled"
+
+
+class JobCancelled(Exception):
+    """Raised at a worker checkpoint to abort the current pipeline cleanly."""
 
 
 class JobPhase(str, Enum):

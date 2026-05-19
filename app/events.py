@@ -39,7 +39,7 @@ class EventBus:
         self._history[job_id].append(event)
         for q in list(self._queues.get(job_id, [])):
             q.put_nowait(event)
-        if event.status in {"done", "error"}:
+        if event.status in {"done", "error", "cancelled"}:
             self._closed.add(job_id)
             for q in list(self._queues.get(job_id, [])):
                 q.put_nowait(None)

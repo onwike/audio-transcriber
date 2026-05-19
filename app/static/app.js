@@ -14,6 +14,7 @@
   let eventSource = null;
   let elapsedTimer = null;
   let elapsedStart = 0;
+  let elapsedAccum = 0;  // ms accumulated across pause cycles
 
   function show(name) {
     Object.values(screens).forEach((s) => s.classList.remove('active'));
@@ -77,14 +78,33 @@
     $('prog-fill').style.width = '100%';
   }
 
+  function _renderElapsed() {
+    const totalMs = elapsedAccum + (elapsedStart ? Date.now() - elapsedStart : 0);
+    $('prog-elapsed').textContent = fmtElapsed(Math.floor(totalMs / 1000));
+  }
+
   function startElapsedTimer() {
     elapsedStart = Date.now();
+    elapsedAccum = 0;
     $('prog-elapsed').textContent = '0:00';
-    elapsedTimer = setInterval(() => {
-      $('prog-elapsed').textContent = fmtElapsed(
-        Math.floor((Date.now() - elapsedStart) / 1000)
-      );
-    }, 500);
+    elapsedTimer = setInterval(_renderElapsed, 500);
+  }
+
+  function pauseElapsedTimer() {
+    if (elapsedTimer && elapsedStart) {
+      elapsedAccum += Date.now() - elapsedStart;
+      elapsedStart = 0;
+      clearInterval(elapsedTimer);
+      elapsedTimer = null;
+      _renderElapsed();
+    }
+  }
+
+  function resumeElapsedTimer() {
+    if (!elapsedTimer) {
+      elapsedStart = Date.now();
+      elapsedTimer = setInterval(_renderElapsed, 500);
+    }
   }
 
   function stopElapsedTimer() {
@@ -92,6 +112,39 @@
       clearInterval(elapsedTimer);
       elapsedTimer = null;
     }
+    elapsedStart = 0;
+  }
+
+  // ─── Button visibility ───
+  function updateControls(phase, status) {
+    const pauseBtn = $('pause-resume-btn');
+    const cancelBtn = $('cancel-btn');
+
+    // Cancel: visible whenever a job is in flight.
+    const inFlight = status === 'running' || status === 'paused';
+    cancelBtn.classList.toggle('hidden', !inFlight);
+
+    // Pause / Resume: only meaningful during the transcribe phase
+    // (diarization & polish runs are atomic — can't be paused mid-call).
+    if (status === 'paused') {
+      pauseBtn.textContent = 'Resume';
+      pauseBtn.dataset.action = 'resume';
+      pauseBtn.classList.remove('hidden');
+    } else if (status === 'running' && phase === 'transcribe') {
+      pauseBtn.textContent = 'Pause';
+      pauseBtn.dataset.action = 'pause';
+      pauseBtn.classList.remove('hidden');
+    } else {
+      pauseBtn.classList.add('hidden');
+    }
+  }
+
+  function markPhasePaused(phase) {
+    document.querySelectorAll('.phases li').forEach((li) =>
+      li.classList.remove('active', 'paused')
+    );
+    const li = document.querySelector(`.phases li[data-phase="${phase}"]`);
+    if (li) li.classList.add('paused');
   }
 
   // ─── Drag & drop ───
@@ -153,19 +206,39 @@
     eventSource = new EventSource(`/jobs/${jobId}/events`);
     eventSource.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      if (data.phase) setPhaseActive(data.phase);
+
+      if (data.status === 'paused') {
+        markPhasePaused(data.phase);
+        pauseElapsedTimer();
+      } else if (data.phase) {
+        setPhaseActive(data.phase);
+      }
+
       $('prog-fill').style.width = data.percent + '%';
       $('prog-message').textContent = data.message;
-      if (data.status === 'done') {
+      updateControls(data.phase, data.status);
+
+      if (data.status === 'running') {
+        resumeElapsedTimer();
+      } else if (data.status === 'done') {
         eventSource.close();
         setPhaseAllDone();
         stopElapsedTimer();
+        updateControls(data.phase, 'done');
         loadResult(jobId);
       } else if (data.status === 'error') {
         eventSource.close();
         stopElapsedTimer();
+        updateControls(data.phase, 'error');
         show('upload');
         showError(data.error || data.message);
+      } else if (data.status === 'cancelled') {
+        eventSource.close();
+        stopElapsedTimer();
+        updateControls(data.phase, 'cancelled');
+        currentJobId = null;
+        fileInput.value = '';
+        show('upload');
       }
     };
     eventSource.onerror = () => {
@@ -230,6 +303,38 @@
   $('error-dismiss').addEventListener('click', () => {
     hideError();
     show('upload');
+  });
+
+  // ─── Pause / Resume / Stop ───
+  $('pause-resume-btn').addEventListener('click', async () => {
+    if (!currentJobId) return;
+    const action = $('pause-resume-btn').dataset.action || 'pause';
+    try {
+      const res = await fetch(`/jobs/${currentJobId}/${action}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || `${action} failed (${res.status})`);
+      }
+      // The SSE channel will deliver the resulting 'paused' / 'running' event;
+      // UI updates happen there so they stay in sync with server truth.
+    } catch (e) {
+      showError(e.message);
+    }
+  });
+
+  $('cancel-btn').addEventListener('click', async () => {
+    if (!currentJobId) return;
+    $('prog-message').textContent = 'Stopping…';
+    try {
+      const res = await fetch(`/jobs/${currentJobId}/cancel`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || `Cancel failed (${res.status})`);
+      }
+      // The 'cancelled' SSE event drops us back to the upload screen.
+    } catch (e) {
+      showError(e.message);
+    }
   });
 
   $('repolish-btn').addEventListener('click', async () => {

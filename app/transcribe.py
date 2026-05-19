@@ -5,7 +5,12 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
+
+from app.models import JobCancelled
+
+if TYPE_CHECKING:
+    from app.jobs import JobControl
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +75,7 @@ def load_diarizer(token: str) -> None:
 def _sync_transcribe(
     wav_path: Path,
     on_progress: Callable[[float], None],
+    control: Optional["JobControl"] = None,
 ) -> tuple[list[Segment], dict]:
     if _model is None:
         raise RuntimeError("Whisper model not loaded")
@@ -82,6 +88,11 @@ def _sync_transcribe(
     total = info.duration or 0.0
     segments: list[Segment] = []
     for seg in segments_iter:
+        # Cooperative pause/cancel checkpoint, evaluated once per segment.
+        if control is not None:
+            control.wait_if_paused()
+            if control.is_cancelled():
+                raise JobCancelled()
         segments.append(Segment(
             start=float(seg.start),
             end=float(seg.end),
@@ -103,6 +114,7 @@ def _sync_transcribe(
 async def transcribe(
     wav_path: Path,
     on_progress: Optional[Callable[[float], None]] = None,
+    control: Optional["JobControl"] = None,
 ) -> tuple[list[Segment], dict]:
     """Run Whisper transcription off-loop. Progress callback fires on event loop thread."""
     loop = asyncio.get_running_loop()
@@ -111,7 +123,9 @@ async def transcribe(
     def thread_safe_cb(p: float) -> None:
         loop.call_soon_threadsafe(user_cb, p)
 
-    return await loop.run_in_executor(None, _sync_transcribe, wav_path, thread_safe_cb)
+    return await loop.run_in_executor(
+        None, _sync_transcribe, wav_path, thread_safe_cb, control
+    )
 
 
 def _sync_diarize(wav_path: Path):

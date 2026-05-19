@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.events import ProgressEvent, get_bus
 from app.export import export_md_and_pdf
 from app.jobs import get_store
-from app.models import JobPhase, JobStatus
+from app.models import JobCancelled, JobPhase, JobStatus
 from app.polish import polish, save_polished
 from app.transcribe import (
     diarize_and_assign,
@@ -37,6 +37,7 @@ async def run_pipeline(job_id: str) -> None:
     store = get_store()
     settings = get_settings()
     work_dir = store.dir(job_id)
+    control = store.control(job_id)
     normalized = work_dir / "normalized.wav"
     transcript_path = work_dir / "transcript.json"
 
@@ -46,8 +47,14 @@ async def run_pipeline(job_id: str) -> None:
             phase=phase.value, percent=percent, message=message, status=status,
         ))
 
+    def check_cancel() -> None:
+        if control.is_cancelled():
+            raise JobCancelled()
+
     async with _pipeline_lock:
         try:
+            check_cancel()
+
             # ── Transcribe ──────────────────────────────────────────────
             emit(JobPhase.TRANSCRIBE, 0, "Loading audio into Whisper…")
 
@@ -56,7 +63,8 @@ async def run_pipeline(job_id: str) -> None:
                 pct = int(p * 95) if settings.enable_diarization else int(p * 100)
                 emit(JobPhase.TRANSCRIBE, pct, f"Transcribing… {int(p * 100)}%")
 
-            segments, info = await transcribe(normalized, on_progress=on_progress)
+            segments, info = await transcribe(normalized, on_progress=on_progress, control=control)
+            check_cancel()
             lang = info.get("language") or "unknown"
             emit(
                 JobPhase.TRANSCRIBE,
@@ -64,10 +72,11 @@ async def run_pipeline(job_id: str) -> None:
                 f"Transcribed {len(segments)} segments (language: {lang})",
             )
 
-            # ── Diarize (optional) ──────────────────────────────────────
+            # ── Diarize (optional, atomic — not pause/cancel checkpoint inside) ──
             if settings.enable_diarization:
                 emit(JobPhase.TRANSCRIBE, 96, "Identifying speakers…")
                 segments = await diarize_and_assign(normalized, segments)
+                check_cancel()
                 speakers = sorted({s.speaker for s in segments if s.speaker})
                 emit(
                     JobPhase.TRANSCRIBE,
@@ -77,15 +86,17 @@ async def run_pipeline(job_id: str) -> None:
                 )
 
             save_transcript(transcript_path, segments, info)
+            check_cancel()
 
             # ── Polish ──────────────────────────────────────────────────
             def on_polish(pct: int, msg: str) -> None:
                 emit(JobPhase.POLISH, pct, msg)
 
             emit(JobPhase.POLISH, 0, "Polishing transcript with Claude…")
-            polished = await polish(segments, on_progress=on_polish)
+            polished = await polish(segments, on_progress=on_polish, control=control)
             save_polished(work_dir / "polished.json", polished)
             emit(JobPhase.POLISH, 100, f"Polished: «{polished.title}»")
+            check_cancel()
 
             # ── Export to MD + PDF ──────────────────────────────────────
             emit(JobPhase.EXPORT, 0, "Rendering Markdown + PDF…")
@@ -105,6 +116,18 @@ async def run_pipeline(job_id: str) -> None:
                 status="done",
             ))
 
+        except JobCancelled:
+            logger.info("Pipeline cancelled for job %s", job_id)
+            current = store.get(job_id)
+            phase = (current.phase if current else JobPhase.TRANSCRIBE) or JobPhase.TRANSCRIBE
+            store.update(job_id, status=JobStatus.CANCELLED, message="Cancelled by user")
+            bus.publish(job_id, ProgressEvent(
+                phase=phase.value,
+                percent=current.percent if current else 0,
+                message="Cancelled",
+                status="cancelled",
+            ))
+
         except Exception as e:
             logger.exception("Pipeline failed for job %s", job_id)
             store.update(job_id, status=JobStatus.ERROR, error=str(e))
@@ -122,6 +145,7 @@ async def run_polish_only(job_id: str) -> None:
     bus = get_bus()
     store = get_store()
     work_dir = store.dir(job_id)
+    control = store.control(job_id)
     transcript_path = work_dir / "transcript.json"
 
     def emit(phase: JobPhase, percent: int, message: str, status: str = "running") -> None:
@@ -138,7 +162,7 @@ async def run_polish_only(job_id: str) -> None:
                 emit(JobPhase.POLISH, pct, msg)
 
             emit(JobPhase.POLISH, 0, "Re-polishing transcript with Claude…")
-            polished = await polish(segments, on_progress=on_polish)
+            polished = await polish(segments, on_progress=on_polish, control=control)
             save_polished(work_dir / "polished.json", polished)
             emit(JobPhase.POLISH, 100, f"Polished: «{polished.title}»")
 
@@ -157,6 +181,18 @@ async def run_polish_only(job_id: str) -> None:
                 percent=100,
                 message=f"Done — «{polished.title}»",
                 status="done",
+            ))
+
+        except JobCancelled:
+            logger.info("Re-polish cancelled for job %s", job_id)
+            current = store.get(job_id)
+            phase = (current.phase if current else JobPhase.POLISH) or JobPhase.POLISH
+            store.update(job_id, status=JobStatus.CANCELLED, message="Cancelled by user")
+            bus.publish(job_id, ProgressEvent(
+                phase=phase.value,
+                percent=current.percent if current else 0,
+                message="Cancelled",
+                status="cancelled",
             ))
 
         except Exception as e:

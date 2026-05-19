@@ -13,7 +13,7 @@ from app.audio import (
     normalize_to_wav,
 )
 from app.config import EXPORTS_DIR, get_settings
-from app.events import get_bus
+from app.events import ProgressEvent, get_bus
 from app.jobs import get_store
 from app.models import Job, JobPhase, JobStatus
 from app.pipeline import run_pipeline, run_polish_only, spawn
@@ -166,6 +166,66 @@ async def repolish(job_id: str) -> Job:
     )
     spawn(run_polish_only(job_id))
     return updated
+
+
+@router.post("/{job_id}/pause", response_model=Job)
+async def pause_job(job_id: str) -> Job:
+    store = get_store()
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job.status != JobStatus.RUNNING:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Can only pause a running job (status was {job.status.value})",
+        )
+    store.control(job_id).pause()
+    updated = store.update(job_id, status=JobStatus.PAUSED, message="Paused")
+    get_bus().publish(job_id, ProgressEvent(
+        phase=(updated.phase or JobPhase.TRANSCRIBE).value,
+        percent=updated.percent,
+        message="Paused — click Resume to continue",
+        status="paused",
+    ))
+    return updated
+
+
+@router.post("/{job_id}/resume", response_model=Job)
+async def resume_job(job_id: str) -> Job:
+    store = get_store()
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job.status != JobStatus.PAUSED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Can only resume a paused job (status was {job.status.value})",
+        )
+    store.control(job_id).resume()
+    updated = store.update(job_id, status=JobStatus.RUNNING, message="Resuming…")
+    get_bus().publish(job_id, ProgressEvent(
+        phase=(updated.phase or JobPhase.TRANSCRIBE).value,
+        percent=updated.percent,
+        message="Resumed",
+        status="running",
+    ))
+    return updated
+
+
+@router.post("/{job_id}/cancel", response_model=Job)
+async def cancel_job(job_id: str) -> Job:
+    store = get_store()
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job.status in (JobStatus.DONE, JobStatus.ERROR, JobStatus.CANCELLED):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Job already finished (status: {job.status.value})",
+        )
+    # Signal the worker; it will publish the terminal 'cancelled' event itself.
+    store.control(job_id).cancel()
+    return store.update(job_id, message="Stopping…")
 
 
 @router.get("/{job_id}/download/{kind}")

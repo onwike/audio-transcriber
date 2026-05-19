@@ -4,11 +4,16 @@ import logging
 from pathlib import Path
 from typing import Callable, Optional
 
+from typing import TYPE_CHECKING
+
 from anthropic import AsyncAnthropic
 
 from app.config import PROJECT_ROOT, get_settings
-from app.models import PolishedTranscript
+from app.models import JobCancelled, PolishedTranscript
 from app.transcribe import Segment
+
+if TYPE_CHECKING:
+    from app.jobs import JobControl
 
 logger = logging.getLogger(__name__)
 
@@ -191,13 +196,21 @@ async def _stitch(parts: list[PolishedTranscript]) -> PolishedTranscript:
 async def polish(
     segments: list[Segment],
     on_progress: Optional[Callable[[int, str], None]] = None,
+    control: Optional["JobControl"] = None,
 ) -> PolishedTranscript:
     cb = on_progress or (lambda pct, msg: None)
+
+    def check_cancel() -> None:
+        if control is not None and control.is_cancelled():
+            raise JobCancelled()
+
+    check_cancel()
     formatted = _format_segments(segments)
 
     if len(formatted) <= MAX_CHARS_PER_CHUNK:
-        cb(20, "Calling Claude (Opus 4.7)…")
+        cb(20, "Calling Claude…")
         result = await _polish_single(formatted)
+        check_cancel()
         cb(100, f"Polished: «{result.title}»")
         return result
 
@@ -205,11 +218,14 @@ async def polish(
     cb(5, f"Transcript exceeds single-call budget; split into {len(chunks)} chunks")
     parts: list[PolishedTranscript] = []
     for i, chunk in enumerate(chunks):
+        check_cancel()
         cb(int(5 + (i / len(chunks)) * 85), f"Polishing chunk {i + 1}/{len(chunks)}…")
         parts.append(await _polish_single(_format_segments(chunk)))
 
+    check_cancel()
     cb(92, "Stitching chunk titles & summaries…")
     result = await _stitch(parts)
+    check_cancel()
     cb(100, f"Polished: «{result.title}»")
     return result
 

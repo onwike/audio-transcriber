@@ -1,0 +1,90 @@
+@page {
+  size: A4;
+  margin: 2.5cm 2.5cm 3cm 2.5cm;
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 9pt;
+    color: #888;
+  }
+}
+
+@page :first {
+  @bottom-right {
+    content: none;
+  }
+}
+
+body {
+  font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+h1 {
+  font-size: 30pt;
+  font-weight: 700;
+  line-height: 1.15;
+  margin: 0 0 0.6em 0;
+  letter-spacing: -0.01em;
+  page-break-after: avoid;
+}
+
+h2 {
+  font-size: 15pt;
+  font-weight: 600;
+  margin: 2.2em 0 0.2em 0;
+  page-break-after: avoid;
+  border-top: 1px solid #ddd;
+  padding-top: 1em;
+  letter-spacing: -0.005em;
+}
+
+blockquote {
+  font-style: italic;
+  font-size: 13pt;
+  line-height: 1.5;
+  color: #444;
+  border-left: none;
+  padding: 0;
+  margin: 1.5em 0 0 0;
+  max-width: 95%;
+}
+
+h2 + p > em:only-child {
+  font-style: italic;
+  font-size: 9.5pt;
+  color: #888;
+  letter-spacing: 0.04em;
+}
+
+p {
+  margin: 0.7em 0;
+  text-align: justify;
+  hyphens: auto;
+  orphans: 3;
+  widows: 3;
+}
+
+p > strong:first-child {
+  color: #555;
+  font-weight: 600;
+  font-size: 9.5pt;
+  letter-spacing: 0.03em;
+  margin-right: 0.4em;
+}
+
+hr {
+  border: none;
+  margin: 0;
+  height: 0;
+  visibility: hidden;
+  page-break-after: always;
+}
+
+a {
+  color: #1a1a1a;
+  text-decoration: none;
+}

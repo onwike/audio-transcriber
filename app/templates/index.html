@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audio Transcriber</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header>
+    <h1>Audio Transcriber</h1>
+    <p class="subtitle">WHISPER · CLAUDE · CLEAN PDF + MARKDOWN</p>
+  </header>
+
+  <main>
+    <section id="screen-upload" class="screen active">
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.m4a,.wav,.flac,.ogg,.oga,.opus,.aac,.webm,.mp4,.wma" hidden>
+        <div class="dropzone-text">
+          <strong>Drop an audio file here</strong>
+          <span>or click to choose</span>
+        </div>
+        <div class="dropzone-formats">mp3 · m4a · wav · flac · ogg · opus · webm · mp4 · aac</div>
+      </label>
+      <p class="hint">Long audio is fine — chunking is automatic.</p>
+    </section>
+
+    <section id="screen-progress" class="screen">
+      <div class="job-meta">
+        <strong id="prog-filename"></strong>
+        <span id="prog-fileinfo"></span>
+      </div>
+      <ol class="phases">
+        <li data-phase="ingest"><span class="phase-dot"></span><span class="phase-label">Ingest</span></li>
+        <li data-phase="transcribe"><span class="phase-dot"></span><span class="phase-label">Transcribe</span></li>
+        <li data-phase="polish"><span class="phase-dot"></span><span class="phase-label">Polish</span></li>
+        <li data-phase="export"><span class="phase-dot"></span><span class="phase-label">Export</span></li>
+      </ol>
+      <div class="progress-bar">
+        <div class="progress-fill" id="prog-fill"></div>
+      </div>
+      <p class="status-message" id="prog-message">Starting…</p>
+      <p class="elapsed">Elapsed <span id="prog-elapsed">0:00</span></p>
+    </section>
+
+    <section id="screen-result" class="screen">
+      <div class="result-actions">
+        <a id="download-pdf" class="btn btn-primary" download>Download PDF</a>
+        <a id="download-md" class="btn" download>Download Markdown</a>
+        <button id="repolish-btn" class="btn btn-secondary">Re-polish</button>
+        <button id="restart-btn" class="btn btn-text">Start over</button>
+      </div>
+      <article id="transcript-preview" class="transcript-preview"></article>
+    </section>
+
+    <div id="error-banner" class="error-banner hidden">
+      <strong>Something went wrong</strong>
+      <p id="error-message"></p>
+      <button id="error-dismiss" class="btn btn-text">Start over</button>
+    </div>
+  </main>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

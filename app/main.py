@@ -52,16 +52,30 @@ async def lifespan(app: FastAPI):
         )
 
     # ─── Preflight: credentials, gating, native libs ─────────────────
-    # Runs before any heavy model download so the user sees every
-    # actionable issue in one pass instead of fix-one-then-retry cycles.
+    # Runs before any heavy model download. Two failure tiers:
+    #   - Errors (bad key, missing gating, missing pango) abort startup
+    #   - Warnings (transient 5xx, rate limit, network blip) are logged
+    #     but startup proceeds — local-only work (history, re-polish,
+    #     downloads) shouldn't be held hostage by an upstream blip.
     logger.info("Running preflight checks (Anthropic, HuggingFace, WeasyPrint)…")
-    errors = await run_preflight(s)
+    errors, warnings = await run_preflight(s)
+    if errors or warnings:
+        report = format_preflight_report(errors, warnings)
+        if errors:
+            logger.error(report)
+        else:
+            logger.warning(report)
     if errors:
-        logger.error(format_preflight_report(errors))
         raise RuntimeError(
-            f"Preflight failed: {len(errors)} issue(s). See report above."
+            f"Preflight failed: {len(errors)} blocking issue(s). See report above."
         )
-    logger.info("Preflight passed ✓")
+    if warnings:
+        logger.info(
+            "Preflight completed with %d warning(s); startup proceeding.",
+            len(warnings),
+        )
+    else:
+        logger.info("Preflight passed ✓")
 
     # ─── Rebuild job index from disk (history) ───────────────────────
     from app.jobs import get_store

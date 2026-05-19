@@ -19,21 +19,38 @@ REQUIRED_HF_MODELS: list[str] = [
 
 
 class PreflightFailure(Exception):
-    """User-actionable preflight failure with embedded fix instructions."""
+    """Hard, user-actionable preflight failure — startup aborts."""
+
+
+class PreflightWarning(Exception):
+    """Soft, transient preflight issue — startup proceeds, user is informed.
+
+    Use this for upstream service flakes (5xx, network, rate limits) where
+    the configuration is correct but the dependency is momentarily unhealthy.
+    Local-only work (history, re-polish later, downloads) keeps working.
+    """
 
 
 # ── Individual checks ────────────────────────────────────────────────────
 
 
 async def check_anthropic(api_key: str, model: str) -> None:
-    """Validate the Anthropic key + chosen model + non-zero credit with a tiny call."""
+    """Validate the Anthropic key + chosen model + non-zero credit with a tiny call.
+
+    Distinguishes configurational failures (bad key, model not found, no credit)
+    from transient upstream issues (5xx, network, rate limit). Transient failures
+    raise PreflightWarning so startup can proceed — the user can still browse
+    history and re-polish later.
+    """
     if not api_key:
         raise PreflightFailure(
             "ANTHROPIC_API_KEY is empty. Set it in .env "
             "(get a key at https://console.anthropic.com/settings/keys)."
         )
 
-    client = AsyncAnthropic(api_key=api_key)
+    # max_retries=5 to ride out short 529 (overloaded) waves — same as the
+    # polish client. Default of 2 was killing preflight during Anthropic blips.
+    client = AsyncAnthropic(api_key=api_key, max_retries=5)
     try:
         await client.messages.create(
             model=model,
@@ -43,6 +60,8 @@ async def check_anthropic(api_key: str, model: str) -> None:
     except APIStatusError as e:
         status = getattr(e, "status_code", None)
         body = str(e)
+
+        # ── Configurational failures: abort startup ─────────────────────
         if status == 401 or "authentication" in body.lower():
             raise PreflightFailure(
                 "ANTHROPIC_API_KEY rejected by Anthropic. "
@@ -61,9 +80,35 @@ async def check_anthropic(api_key: str, model: str) -> None:
                 "Check CLAUDE_MODEL in .env — see "
                 "https://docs.anthropic.com/en/docs/about-claude/models for valid IDs."
             )
-        raise PreflightFailure(f"Anthropic API rejected the test call: HTTP {status} — {body[:200]}")
+
+        # ── Transient upstream issues: warn, allow startup ──────────────
+        if status == 429:
+            raise PreflightWarning(
+                "Anthropic API rate-limited during preflight (HTTP 429). "
+                "Startup will proceed; polish runs may be throttled momentarily. "
+                "Existing transcripts remain accessible."
+            )
+        if status is not None and 500 <= status < 600:
+            raise PreflightWarning(
+                f"Anthropic API returned HTTP {status} during preflight "
+                "(likely transient — the API was overloaded). Startup will proceed; "
+                "new polish runs may fail until the API recovers. Existing "
+                "transcripts, history, and re-polish remain accessible — re-polish "
+                "the new ones once Anthropic recovers."
+            )
+
+        # Unknown status — abort to be safe
+        raise PreflightFailure(
+            f"Anthropic API rejected the test call: HTTP {status} — {body[:200]}"
+        )
+
     except APIError as e:
-        raise PreflightFailure(f"Anthropic API unreachable: {e}")
+        # Network/connectivity layer — treat as transient so local work continues
+        raise PreflightWarning(
+            f"Couldn't reach Anthropic API during preflight: {e}. Startup will "
+            "proceed; transcript history and downloads remain accessible. "
+            "Check connectivity if new polish runs fail."
+        )
 
 
 async def check_huggingface(token: str, models: list[str]) -> None:
@@ -135,41 +180,61 @@ def check_weasyprint() -> None:
 # ── Orchestrator ─────────────────────────────────────────────────────────
 
 
-async def run_preflight(settings: Any) -> list[str]:
-    """Run every preflight check. Return a list of error strings (empty = all good).
+async def run_preflight(settings: Any) -> tuple[list[str], list[str]]:
+    """Run every preflight check. Return (errors, warnings).
 
-    We collect all failures rather than short-circuiting so the user sees every
-    actionable issue in a single startup pass.
+    Errors are blocking — startup aborts. Warnings are advisory — the user
+    is informed but startup proceeds. We collect everything so the user
+    sees every issue in one pass instead of fix-one-then-retry cycles.
     """
     errors: list[str] = []
+    warnings: list[str] = []
 
     try:
         await check_anthropic(settings.anthropic_api_key, settings.claude_model)
     except PreflightFailure as e:
         errors.append(str(e))
+    except PreflightWarning as e:
+        warnings.append(str(e))
 
     if settings.enable_diarization:
         try:
             await check_huggingface(settings.huggingface_token or "", REQUIRED_HF_MODELS)
         except PreflightFailure as e:
             errors.append(str(e))
+        except PreflightWarning as e:
+            warnings.append(str(e))
 
     try:
         check_weasyprint()
     except PreflightFailure as e:
         errors.append(str(e))
+    except PreflightWarning as e:
+        warnings.append(str(e))
 
-    return errors
+    return errors, warnings
 
 
-def format_preflight_report(errors: list[str]) -> str:
-    """Format collected errors into a single human-readable banner."""
-    banner_line = "─" * 70
-    body = "\n\n".join(f"  ✗ {msg}" for msg in errors)
-    return (
-        f"\n{banner_line}\n"
-        f"  PREFLIGHT FAILED — {len(errors)} issue(s). Fix and restart.\n"
-        f"{banner_line}\n\n"
-        f"{body}\n\n"
-        f"{banner_line}\n"
-    )
+def format_preflight_report(errors: list[str], warnings: list[str]) -> str:
+    """Format collected errors and warnings into a single human-readable banner."""
+    banner = "─" * 70
+    sections: list[str] = []
+    if errors:
+        body = "\n\n".join(f"  ✗ {msg}" for msg in errors)
+        sections.append(
+            f"\n{banner}\n"
+            f"  PREFLIGHT FAILED — {len(errors)} blocking issue(s). Fix and restart.\n"
+            f"{banner}\n\n"
+            f"{body}\n"
+        )
+    if warnings:
+        body = "\n\n".join(f"  ⚠ {msg}" for msg in warnings)
+        sections.append(
+            f"\n{banner}\n"
+            f"  PREFLIGHT WARNINGS — {len(warnings)} transient issue(s). Startup proceeds.\n"
+            f"{banner}\n\n"
+            f"{body}\n"
+        )
+    if sections:
+        sections.append(banner)
+    return "\n".join(sections)

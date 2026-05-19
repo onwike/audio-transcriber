@@ -23,15 +23,6 @@ AVAILABLE_WHISPER_MODELS: list[str] = [
     "large-v3",
 ]
 
-# Map of short name → HF repo. faster-whisper accepts short names directly
-# but snapshot_download needs full repo IDs.
-_HF_REPO = {
-    "small": "Systran/faster-whisper-small",
-    "medium": "Systran/faster-whisper-medium",
-    "large-v3": "Systran/faster-whisper-large-v3",
-    "large-v3-turbo": "Systran/faster-whisper-large-v3-turbo",
-}
-
 _models: dict[str, object] = {}  # name → WhisperModel
 _diarizer = None  # pyannote.audio.Pipeline
 
@@ -48,19 +39,36 @@ class Segment:
 def predownload_whisper_models(names: list[str]) -> None:
     """Ensure model snapshots are present in the HF cache.
 
-    Doesn't load into RAM — that happens lazily on first transcribe.
-    snapshot_download is idempotent: re-running with cached weights is fast.
-    """
-    from huggingface_hub import snapshot_download
+    Uses faster_whisper.utils.download_model so we don't have to maintain a
+    short-name → HF repo map ourselves (different orgs publish different
+    models — `large-v3-turbo` lives at mobiuslabsgmbh, not Systran). The
+    library's internal map is canonical.
 
+    Doesn't load into RAM — that happens lazily on first transcribe.
+    download_model is idempotent: cached weights skip the network.
+    """
+    from faster_whisper.utils import download_model
+
+    failures: list[tuple[str, str]] = []
     for name in names:
-        repo = _HF_REPO.get(name)
-        if not repo:
-            logger.warning("No HF repo mapping for '%s'; skipping pre-download", name)
-            continue
-        logger.info("Pre-downloading Whisper model '%s' (%s)…", name, repo)
-        snapshot_download(repo)
-    logger.info("All Whisper model weights cached on disk")
+        logger.info("Pre-downloading Whisper model '%s'…", name)
+        try:
+            download_model(name)
+        except Exception as e:
+            # Don't crash startup — fall back to lazy-load on first use.
+            logger.warning(
+                "Pre-download failed for '%s' (%s). Will retry lazily on first use.",
+                name, e,
+            )
+            failures.append((name, str(e)))
+
+    if failures:
+        logger.warning(
+            "%d Whisper model(s) failed to pre-download: %s",
+            len(failures), ", ".join(n for n, _ in failures),
+        )
+    else:
+        logger.info("All Whisper model weights cached on disk")
 
 
 def _resolve_device(device: str) -> str:

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class JobStatus(str, Enum):
     PENDING = "pending"
+    QUEUED = "queued"  # waiting for the pipeline lock — another job is running
     RUNNING = "running"
     PAUSED = "paused"
     DONE = "done"

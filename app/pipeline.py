@@ -19,9 +19,79 @@ from app.transcribe import (
 
 logger = logging.getLogger(__name__)
 
-# Single-user app: only one pipeline runs at a time.
+# Single-user app: only one pipeline runs at a time. Additional submitted
+# jobs wait on this lock and surface as JobStatus.QUEUED in the UI.
 _pipeline_lock = asyncio.Lock()
+_queued_jobs: list[str] = []  # job_ids waiting, ordered by arrival
 _running_tasks: set[asyncio.Task] = set()
+
+
+def _queue_message(idx: int) -> str:
+    if idx == 0:
+        return "Queued — next up"
+    return f"Queued — {idx} job{'s' if idx != 1 else ''} ahead"
+
+
+def _emit_queue_status(job_id: str) -> None:
+    """Publish current queue position for a single waiting job."""
+    if job_id not in _queued_jobs:
+        return
+    idx = _queued_jobs.index(job_id)
+    msg = _queue_message(idx)
+    store = get_store()
+    bus = get_bus()
+    current = store.get(job_id)
+    phase = (current.phase if current else None) or JobPhase.INGEST
+    store.update(job_id, status=JobStatus.QUEUED, message=msg, percent=0)
+    bus.publish(job_id, ProgressEvent(
+        phase=phase.value, percent=0, message=msg, status="queued",
+    ))
+
+
+def _refresh_queue() -> None:
+    """Re-emit positions for all remaining queued jobs (someone moved up)."""
+    for queued_id in list(_queued_jobs):
+        _emit_queue_status(queued_id)
+
+
+class _QueuedAcquire:
+    """Async context manager that wraps _pipeline_lock with queue visibility.
+
+    On enter: if the lock is busy, marks the job QUEUED and publishes its
+    position via SSE. While waiting, polls the job's cancel flag every 300ms
+    so cancel-while-queued takes effect quickly.
+    On exit: releases the lock if owned.
+    """
+
+    def __init__(self, job_id: str):
+        self.job_id = job_id
+        self._owned = False
+
+    async def __aenter__(self) -> "_QueuedAcquire":
+        if _pipeline_lock.locked():
+            _queued_jobs.append(self.job_id)
+            _emit_queue_status(self.job_id)
+
+        control = get_store().control(self.job_id)
+        try:
+            while True:
+                if control.is_cancelled():
+                    raise JobCancelled()
+                try:
+                    await asyncio.wait_for(_pipeline_lock.acquire(), timeout=0.3)
+                    self._owned = True
+                    break
+                except asyncio.TimeoutError:
+                    continue
+        finally:
+            if self.job_id in _queued_jobs:
+                _queued_jobs.remove(self.job_id)
+                _refresh_queue()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        if self._owned:
+            _pipeline_lock.release()
 
 
 def spawn(coro: Coroutine) -> asyncio.Task:
@@ -51,7 +121,7 @@ async def run_pipeline(job_id: str) -> None:
         if control.is_cancelled():
             raise JobCancelled()
 
-    async with _pipeline_lock:
+    async with _QueuedAcquire(job_id):
         try:
             check_cancel()
 
@@ -178,7 +248,7 @@ async def run_polish_only(job_id: str) -> None:
             phase=phase.value, percent=percent, message=message, status=status,
         ))
 
-    async with _pipeline_lock:
+    async with _QueuedAcquire(job_id):
         try:
             segments, _info = load_transcript(transcript_path)
 

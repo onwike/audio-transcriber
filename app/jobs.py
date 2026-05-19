@@ -176,7 +176,10 @@ class JobStore:
             except Exception as e:
                 logger.warning("Skipping malformed %s: %s", job_file, e)
                 continue
-            if job.status in (JobStatus.RUNNING, JobStatus.PAUSED, JobStatus.PENDING):
+            if job.status in (
+                JobStatus.RUNNING, JobStatus.PAUSED,
+                JobStatus.PENDING, JobStatus.QUEUED,
+            ):
                 job = job.model_copy(update={
                     "status": JobStatus.ERROR,
                     "error": "Server restarted while this job was in flight",

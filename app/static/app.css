@@ -193,6 +193,7 @@ main {
 .status-badge.cancelled { background: #f0f0f0; color: #666; }
 .status-badge.running,
 .status-badge.paused    { background: #e8f0fe; color: #1a73e8; }
+.status-badge.queued    { background: #fff4dc; color: #b06f00; }
 
 /* ───── Upload ───── */
 .dropzone {

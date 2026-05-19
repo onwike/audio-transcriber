@@ -162,12 +162,13 @@
     const pauseBtn = $('pause-resume-btn');
     const cancelBtn = $('cancel-btn');
 
-    // Cancel: visible whenever a job is in flight.
-    const inFlight = status === 'running' || status === 'paused';
+    // Cancel: visible whenever a job is in flight (incl. queued — you can
+    // cancel a queued job before it ever starts running).
+    const inFlight = status === 'running' || status === 'paused' || status === 'queued';
     cancelBtn.classList.toggle('hidden', !inFlight);
 
-    // Pause / Resume: only meaningful during the transcribe phase
-    // (diarization & polish runs are atomic — can't be paused mid-call).
+    // Pause / Resume: only meaningful during the transcribe phase of a
+    // running/paused job. Not for queued (nothing to pause yet) or other phases.
     if (status === 'paused') {
       pauseBtn.textContent = 'Resume';
       pauseBtn.dataset.action = 'resume';
@@ -294,14 +295,18 @@
     eventSource.onmessage = (e) => {
       const data = JSON.parse(e.data);
 
-      if (data.status === 'paused') {
+      if (data.status === 'queued') {
+        // Job is waiting for the pipeline lock — no active phase yet.
+        resetPhases();
+        pauseElapsedTimer();
+      } else if (data.status === 'paused') {
         markPhasePaused(data.phase);
         pauseElapsedTimer();
       } else if (data.phase) {
         setPhaseActive(data.phase);
       }
 
-      $('prog-fill').style.width = data.percent + '%';
+      $('prog-fill').style.width = (data.percent || 0) + '%';
       $('prog-message').textContent = data.message;
       updateControls(data.phase, data.status);
 
@@ -502,7 +507,11 @@
       md.setAttribute('download', '');
 
       actions.append(openBtn, pdf, md);
-    } else if (job.status === 'running' || job.status === 'paused') {
+    } else if (
+      job.status === 'running' ||
+      job.status === 'paused' ||
+      job.status === 'queued'
+    ) {
       const watchBtn = document.createElement('button');
       watchBtn.className = 'btn btn-primary';
       watchBtn.type = 'button';

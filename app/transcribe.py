@@ -120,6 +120,29 @@ def _sync_diarize(wav_path: Path):
     return _diarizer(str(wav_path))
 
 
+def _annotation_from_diarizer_result(result):
+    """Extract the pyannote Annotation regardless of pyannote.audio version.
+
+    pyannote < 3.4: pipeline(wav) returns an Annotation directly.
+    pyannote >= 3.4: returns a DiarizeOutput dataclass; the Annotation
+    lives on `.speaker_diarization` (with `.diarization` and `.output`
+    as historical fallbacks).
+    """
+    if hasattr(result, "itertracks"):
+        return result
+    for attr in ("speaker_diarization", "diarization", "output"):
+        inner = getattr(result, attr, None)
+        if inner is not None and hasattr(inner, "itertracks"):
+            return inner
+    public_attrs = [a for a in dir(result) if not a.startswith("_")]
+    raise RuntimeError(
+        f"Cannot extract Annotation from pyannote result of type "
+        f"{type(result).__name__}. Public attrs: {public_attrs}. "
+        "This is likely a pyannote.audio version mismatch — please file an issue "
+        "with the type name above."
+    )
+
+
 async def diarize_and_assign(
     wav_path: Path,
     segments: list[Segment],
@@ -129,7 +152,8 @@ async def diarize_and_assign(
         return segments
 
     loop = asyncio.get_running_loop()
-    annotation = await loop.run_in_executor(None, _sync_diarize, wav_path)
+    result = await loop.run_in_executor(None, _sync_diarize, wav_path)
+    annotation = _annotation_from_diarizer_result(result)
 
     turns = [
         (turn.start, turn.end, label)

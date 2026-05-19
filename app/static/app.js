@@ -52,6 +52,14 @@
     return `${ss}s`;
   }
 
+  function shortenClaudeModel(name) {
+    // claude-haiku-4-5-20251001 → "haiku 4.5"
+    // claude-sonnet-4-6-20251015 → "sonnet 4.6"
+    // claude-opus-4-7            → "opus 4.7"
+    const m = name && name.match(/^claude-([a-z]+)-(\d+)-(\d+)(?:-\d+)?$/);
+    return m ? `${m[1]} ${m[2]}.${m[3]}` : name;
+  }
+
   function fmtRelative(iso) {
     const date = new Date(iso);
     const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -399,7 +407,8 @@
     meta.className = 'history-meta';
     const bits = [];
     if (job.duration_seconds) bits.push(fmtDuration(job.duration_seconds));
-    if (job.whisper_model) bits.push(job.whisper_model);
+    if (job.whisper_model) bits.push(`whisper: ${job.whisper_model}`);
+    if (job.polish_model) bits.push(`polish: ${shortenClaudeModel(job.polish_model)}`);
     if (job.created_at) bits.push(fmtRelative(job.created_at));
     for (const text of bits) {
       const span = document.createElement('span');

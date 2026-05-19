@@ -55,7 +55,9 @@ async def create_job(
         )
 
     job = store.create(original_filename=file.filename or f"audio{ext}")
-    store.update(job.id, whisper_model=chosen_model)
+    # Snapshot the currently-configured Claude polish model on the job so the
+    # history view can show it later, even if the env var changes.
+    store.update(job.id, whisper_model=chosen_model, polish_model=s.claude_model)
     work_dir = store.dir(job.id)
     original_path = work_dir / f"original{ext}"
 

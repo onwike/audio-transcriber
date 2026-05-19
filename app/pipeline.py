@@ -164,6 +164,11 @@ async def run_polish_only(job_id: str) -> None:
         try:
             segments, _info = load_transcript(transcript_path)
 
+            # Re-snapshot the polish model — if .env changed since the job was
+            # first created, history should reflect what's actually being run now.
+            from app.config import get_settings as _gs
+            store.update(job_id, polish_model=_gs().claude_model)
+
             def on_polish(pct: int, msg: str) -> None:
                 emit(JobPhase.POLISH, pct, msg)
 

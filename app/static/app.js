@@ -17,6 +17,8 @@
   let elapsedTimer = null;
   let elapsedStart = 0;
   let elapsedAccum = 0;  // ms accumulated across pause cycles
+  let historyPollTimer = null;
+  const HISTORY_POLL_MS = 3000;
 
   function show(name) {
     Object.values(screens).forEach((s) => s.classList.remove('active'));
@@ -24,6 +26,8 @@
     // Screen-entry hooks
     if (name === 'upload') refreshHistoryCount();
     if (name === 'history') loadHistory();
+    // Stop history polling whenever we leave the history screen
+    if (name !== 'history') stopHistoryPolling();
   }
 
   function showError(msg) {
@@ -421,8 +425,39 @@
         $('history-empty').classList.add('hidden');
         for (const job of jobs) list.append(renderHistoryItem(job));
       }
+
+      // Auto-poll while any job is in flight so users don't have to click
+      // into each one to see progress. Stops as soon as everything is terminal.
+      const anyInFlight = jobs.some((j) =>
+        j.status === 'running' || j.status === 'paused' || j.status === 'queued'
+      );
+      if (anyInFlight) {
+        startHistoryPolling();
+      } else {
+        stopHistoryPolling();
+      }
     } catch (e) {
+      stopHistoryPolling();
       showError(e.message);
+    }
+  }
+
+  function startHistoryPolling() {
+    if (historyPollTimer) return;  // already running
+    historyPollTimer = setInterval(() => {
+      // Safety: stop ourselves if the user navigated away between ticks
+      if (!screens.history.classList.contains('active')) {
+        stopHistoryPolling();
+        return;
+      }
+      loadHistory();  // recursive — will re-decide whether to keep polling
+    }, HISTORY_POLL_MS);
+  }
+
+  function stopHistoryPolling() {
+    if (historyPollTimer) {
+      clearInterval(historyPollTimer);
+      historyPollTimer = null;
     }
   }
 
@@ -473,6 +508,23 @@
       t.className = 'history-timings';
       t.textContent = timings;
       li.append(t);
+    }
+
+    // Live progress line for in-flight jobs (running / paused / queued)
+    if (['running', 'paused', 'queued'].includes(job.status) && job.message) {
+      const progress = document.createElement('p');
+      progress.className = 'history-progress';
+      // Add a small percent suffix when relevant and the message doesn't
+      // already contain one (transcribe messages embed "X%", but polish
+      // and export messages don't).
+      const showPct = job.status === 'running'
+        && typeof job.percent === 'number'
+        && job.percent > 0
+        && !/\d%/.test(job.message);
+      progress.textContent = showPct
+        ? `${job.message} (${job.percent}%)`
+        : job.message;
+      li.append(progress);
     }
 
     // Error detail

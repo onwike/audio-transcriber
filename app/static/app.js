@@ -474,6 +474,13 @@
       md.setAttribute('download', '');
 
       actions.append(openBtn, pdf, md);
+    } else if (job.status === 'running' || job.status === 'paused') {
+      const watchBtn = document.createElement('button');
+      watchBtn.className = 'btn btn-primary';
+      watchBtn.type = 'button';
+      watchBtn.textContent = 'Watch progress';
+      watchBtn.addEventListener('click', () => watchJob(job.id));
+      actions.append(watchBtn);
     }
 
     const spacer = document.createElement('span');
@@ -494,6 +501,35 @@
   async function openJobFromHistory(jobId) {
     currentJobId = jobId;
     await loadResult(jobId);
+  }
+
+  async function watchJob(jobId) {
+    // Reattach the progress UI to an in-flight (running or paused) job.
+    // The SSE bus replays every past event on subscribe so the phase
+    // indicators / percent / message catch up automatically; we just
+    // need to set the filename, reset the elapsed timer to "rejoined now",
+    // and let the live stream drive everything else.
+    try {
+      const res = await fetch(`/jobs/${jobId}`);
+      if (!res.ok) throw new Error(`Could not load job (${res.status})`);
+      const job = await res.json();
+
+      hideError();
+      currentJobId = jobId;
+      $('prog-filename').textContent = job.original_filename || '(audio)';
+      $('prog-fileinfo').textContent =
+        job.duration_seconds ? fmtDuration(job.duration_seconds) : '';
+      resetPhases();
+      $('prog-message').textContent = 'Reattaching to live stream…';
+      stopElapsedTimer();
+      startElapsedTimer();
+
+      show('progress');
+      // Subscribe — replay catches the UI up to current state, then live events take over.
+      subscribeToJob(jobId);
+    } catch (e) {
+      showError(e.message);
+    }
   }
 
   async function deleteJobFromHistory(jobId, label) {

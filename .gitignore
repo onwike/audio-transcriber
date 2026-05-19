@@ -16,5 +16,7 @@ app/temp/
 .mypy_cache/
 node_modules/
 
-# Icon source files — canonical copy lives at app/static/icon.svg
+# Branding artifacts — canonical copies live at app/static/icon.svg
+# and (after upload) GitHub repo Settings → Social preview
 /transcriber-icon-style-*
+/social-preview.png

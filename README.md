@@ -13,7 +13,7 @@ Drop audio → polished PDF + MD in your browser, ~$0.30 per 10 hours of audio a
 ## Prerequisites
 
 - **macOS or Linux** — Apple Silicon supported, GPU optional
-- **Python 3.10+**
+- **Python 3.10+** — the codebase uses PEP 604 union syntax. macOS's default `python3` is 3.9 (Xcode CLT); install a newer one with `brew install python@3.12`.
 - **Homebrew packages:** `ffmpeg`, `pango`
 - **Anthropic API key** with non-zero credit at [console.anthropic.com](https://console.anthropic.com/settings/billing) (separate billing from any Claude.ai subscription)
 - **Hugging Face account + token** for speaker diarization (optional — set `ENABLE_DIARIZATION=false` to skip)

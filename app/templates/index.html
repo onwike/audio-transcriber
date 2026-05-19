@@ -24,11 +24,21 @@
       </div>
       <label class="dropzone" id="dropzone">
         <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.m4a,.wav,.flac,.ogg,.oga,.opus,.aac,.webm,.mp4,.wma" hidden>
-        <div class="dropzone-text">
-          <strong>Drop an audio file here</strong>
-          <span>or click to choose</span>
+        <div class="dropzone-state" id="dropzone-empty">
+          <div class="dropzone-text">
+            <strong>Drop an audio file here</strong>
+            <span>or click to choose</span>
+          </div>
+          <div class="dropzone-formats">mp3 · m4a · wav · flac · ogg · opus · webm · mp4 · aac</div>
         </div>
-        <div class="dropzone-formats">mp3 · m4a · wav · flac · ogg · opus · webm · mp4 · aac</div>
+        <div class="dropzone-state hidden" id="dropzone-staged">
+          <div class="dropzone-check">✓</div>
+          <div class="dropzone-staged-info">
+            <strong id="staged-name"></strong>
+            <span id="staged-meta"></span>
+          </div>
+          <span class="dropzone-hint">Click or drop to swap file</span>
+        </div>
       </label>
 
       <fieldset class="model-picker" aria-label="Whisper model">
@@ -56,6 +66,10 @@
           </label>
         </div>
       </fieldset>
+
+      <button id="start-btn" class="btn btn-primary btn-start" type="button" disabled>
+        Start transcription
+      </button>
 
       <p class="hint">Long audio is fine — chunking is automatic.</p>
     </section>

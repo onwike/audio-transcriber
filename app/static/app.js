@@ -12,6 +12,7 @@
   const errorMessage = $('error-message');
 
   let currentJobId = null;
+  let stagedFile = null;
   let eventSource = null;
   let elapsedTimer = null;
   let elapsedStart = 0;
@@ -161,7 +162,7 @@
     if (li) li.classList.add('paused');
   }
 
-  // ─── Drag & drop ───
+  // ─── Drag & drop (stages only — upload starts when user clicks Start) ───
   ['dragenter', 'dragover'].forEach((ev) =>
     dropzone.addEventListener(ev, (e) => {
       e.preventDefault();
@@ -175,10 +176,36 @@
     })
   );
   dropzone.addEventListener('drop', (e) => {
-    if (e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files.length) stageFile(e.dataTransfer.files[0]);
   });
   fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length) upload(e.target.files[0]);
+    if (e.target.files.length) stageFile(e.target.files[0]);
+  });
+
+  function stageFile(file) {
+    stagedFile = file;
+    $('staged-name').textContent = file.name;
+    $('staged-meta').textContent = fmtBytes(file.size);
+    $('dropzone-empty').classList.add('hidden');
+    $('dropzone-staged').classList.remove('hidden');
+    dropzone.classList.add('has-file');
+    $('start-btn').disabled = false;
+  }
+
+  function clearStaged() {
+    stagedFile = null;
+    fileInput.value = '';
+    $('dropzone-empty').classList.remove('hidden');
+    $('dropzone-staged').classList.add('hidden');
+    dropzone.classList.remove('has-file');
+    $('start-btn').disabled = true;
+  }
+
+  $('start-btn').addEventListener('click', () => {
+    if (!stagedFile) return;
+    const file = stagedFile;
+    clearStaged();
+    upload(file);
   });
 
   // ─── Upload + subscribe ───
@@ -455,7 +482,7 @@
   $('view-history-from-result-btn').addEventListener('click', () => show('history'));
   $('new-from-history-btn').addEventListener('click', () => {
     hideError();
-    fileInput.value = '';
+    clearStaged();
     currentJobId = null;
     show('upload');
   });
@@ -465,7 +492,7 @@
     if (eventSource) eventSource.close();
     stopElapsedTimer();
     hideError();
-    fileInput.value = '';
+    clearStaged();
     currentJobId = null;
     show('upload');
   });

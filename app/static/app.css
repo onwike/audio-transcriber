@@ -187,6 +187,47 @@ main {
   transition: border-color 120ms, background 120ms;
 }
 .dropzone:hover, .dropzone.dragging { border-color: var(--ink); }
+.dropzone.has-file {
+  border-style: solid;
+  border-color: #137333;
+  background: #f5fbf6;
+}
+.dropzone-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.dropzone-check {
+  font-size: 28pt;
+  color: #137333;
+  line-height: 1;
+  margin-bottom: 0.4em;
+}
+.dropzone-staged-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2em;
+  max-width: 90%;
+}
+.dropzone-staged-info strong {
+  font-family: var(--serif);
+  font-size: 14pt;
+  font-weight: 600;
+  text-align: center;
+  word-break: break-word;
+}
+.dropzone-staged-info span {
+  color: var(--muted);
+  font-size: 10pt;
+}
+.dropzone-hint {
+  margin-top: 1.2em;
+  font-size: 9pt;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
 .dropzone-text { text-align: center; }
 .dropzone-text strong {
   display: block;
@@ -207,6 +248,24 @@ main {
   color: var(--muted);
   font-size: 10pt;
   margin-top: 1em;
+}
+
+.btn-start {
+  display: block;
+  margin: 2em auto 0;
+  font-size: 11pt;
+  padding: 0.9em 2.4em;
+  min-width: 260px;
+  letter-spacing: 0.02em;
+}
+.btn-start:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.btn-start:disabled:hover {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
 }
 
 /* ───── Whisper model picker ───── */

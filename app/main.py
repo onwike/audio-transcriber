@@ -20,6 +20,27 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("app")
 
 
+class _SuppressPollingFilter(logging.Filter):
+    """Drop the noisy GET /jobs (history polling) and GET /static/ access
+    log lines. The history view polls every 3 seconds while jobs are in
+    flight, which floods the terminal with otherwise-meaningless 200s.
+    Errors, POSTs, and one-shot endpoints (/jobs/{id}, /events, etc.) are
+    still logged.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        # Match GET /jobs HTTP/* (no path segment after /jobs) and GET /static/*
+        if '"GET /jobs HTTP/' in msg:
+            return False
+        if '"GET /static/' in msg:
+            return False
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_SuppressPollingFilter())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     s = get_settings()

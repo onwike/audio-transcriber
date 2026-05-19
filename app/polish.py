@@ -213,7 +213,13 @@ def _system_prompt() -> str:
 
 
 def _client() -> AsyncAnthropic:
-    return AsyncAnthropic(api_key=get_settings().anthropic_api_key)
+    # max_retries=5 (default is 2) — Anthropic occasionally returns 529
+    # (overloaded) in waves; the SDK's exponential backoff usually rides
+    # them out in 3-4 attempts but the default of 2 isn't enough.
+    return AsyncAnthropic(
+        api_key=get_settings().anthropic_api_key,
+        max_retries=5,
+    )
 
 
 # ── Claude calls ─────────────────────────────────────────────────────────
@@ -302,13 +308,33 @@ async def _polish_chunk(
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "submit_chunk":
-            sections = [PolishedSection.model_validate(s) for s in block.input["sections"]]
-            update = block.input["running_notes_update"]
+            # Defensive parsing: Claude's tool_use compliance is imperfect
+            # (especially on Haiku) and occasionally omits required fields.
+            # Don't crash the whole pipeline over it.
+            sections_data = block.input.get("sections") or []
+            sections = [PolishedSection.model_validate(s) for s in sections_data]
+            if not sections:
+                logger.warning(
+                    "Claude returned no sections for chunk %d/%d — chunk will be empty in output.",
+                    chunk_idx, total_chunks,
+                )
+
+            update = block.input.get("running_notes_update")
+            if update is None:
+                logger.warning(
+                    "Claude omitted running_notes_update in chunk %d/%d response. "
+                    "Carrying prior running notes forward.",
+                    chunk_idx, total_chunks,
+                )
+                return sections, notes  # propagate the caller's notes unchanged
+
+            # Default each field to the prior value rather than empty so a
+            # partial update doesn't drop established context.
             new_notes = RunningNotes(
-                topic_summary=update.get("topic_summary", ""),
-                key_terms=list(update.get("key_terms") or []),
-                speaker_notes=dict(update.get("speaker_notes") or {}),
-                open_threads=list(update.get("open_threads") or []),
+                topic_summary=update.get("topic_summary") or notes.topic_summary,
+                key_terms=list(update.get("key_terms") or notes.key_terms),
+                speaker_notes=dict(update.get("speaker_notes") or notes.speaker_notes),
+                open_threads=list(update.get("open_threads") or notes.open_threads),
             )
             return sections, new_notes
 

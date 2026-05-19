@@ -52,7 +52,7 @@ def load_diarizer(token: str) -> None:
     logger.info("Loading pyannote/speaker-diarization-3.1…")
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
-        use_auth_token=token,
+        token=token,
     )
     if pipeline is None:
         raise RuntimeError(

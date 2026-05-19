@@ -10,8 +10,10 @@
 </head>
 <body>
   <header>
-    <img src="/static/icon.svg" alt="" class="app-icon" width="80" height="80">
-    <h1>Audio Transcriber</h1>
+    <a id="home-link" href="#" aria-label="Start a new transcription">
+      <img src="/static/icon.svg" alt="" class="app-icon" width="80" height="80">
+      <h1>Audio Transcriber</h1>
+    </a>
     <p class="subtitle">WHISPER · CLAUDE · CLEAN PDF + MARKDOWN</p>
   </header>
 
@@ -40,6 +42,23 @@
           <span class="dropzone-hint">Click or drop to swap file</span>
         </div>
       </label>
+
+      <details class="diarization-hints" id="diarization-hints">
+        <summary>Diarization hints <span class="hint-tag">optional</span></summary>
+        <div class="hints-body">
+          <p class="hints-blurb">
+            Help the speaker-labeling pass. The expected count constrains the diarizer directly; names + descriptions let Claude map anonymous <code>SPEAKER_00</code> / <code>SPEAKER_01</code> labels to real names when content makes the mapping clear.
+          </p>
+          <label class="hints-field">
+            <span class="hints-label-text">Expected number of speakers</span>
+            <input type="number" id="expected-speakers" name="expected_speakers" min="1" max="20" placeholder="auto-detect">
+          </label>
+          <label class="hints-field">
+            <span class="hints-label-text">Speaker notes <em class="hints-sub">one per line — Name: description</em></span>
+            <textarea id="speaker-hints" name="speaker_hints" rows="4" placeholder="Alice: host, asks questions&#10;Bob: guest expert, mentions Python often"></textarea>
+          </label>
+        </div>
+      </details>
 
       <fieldset class="model-picker" aria-label="Whisper model">
         <legend>Whisper model</legend>

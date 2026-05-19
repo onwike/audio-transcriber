@@ -199,10 +199,15 @@ async def transcribe(
     )
 
 
-def _sync_diarize(wav_path: Path):
+def _sync_diarize(wav_path: Path, expected_speakers: int | None = None):
     if _diarizer is None:
         raise RuntimeError("Diarizer not loaded")
-    return _diarizer(str(wav_path))
+    kwargs: dict = {}
+    if expected_speakers and expected_speakers > 0:
+        # Pinning both to the same count forces pyannote to that exact number.
+        kwargs["min_speakers"] = expected_speakers
+        kwargs["max_speakers"] = expected_speakers
+    return _diarizer(str(wav_path), **kwargs)
 
 
 def _annotation_from_diarizer_result(result):
@@ -231,13 +236,18 @@ def _annotation_from_diarizer_result(result):
 async def diarize_and_assign(
     wav_path: Path,
     segments: list[Segment],
+    expected_speakers: int | None = None,
 ) -> list[Segment]:
-    """Run pyannote and assign the dominant speaker (by overlap) to each Whisper segment."""
+    """Run pyannote and assign the dominant speaker (by overlap) to each Whisper segment.
+
+    If expected_speakers is provided, pyannote is constrained to exactly that
+    count — materially better than auto-detection on short or noisy audio.
+    """
     if _diarizer is None:
         return segments
 
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, _sync_diarize, wav_path)
+    result = await loop.run_in_executor(None, _sync_diarize, wav_path, expected_speakers)
     annotation = _annotation_from_diarizer_result(result)
 
     turns = [

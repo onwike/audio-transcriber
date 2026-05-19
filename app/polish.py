@@ -224,13 +224,32 @@ async def _polish_chunk(
     chunk_idx: int,
     total_chunks: int,
     notes: RunningNotes,
+    speaker_hints: list[dict] | None = None,
 ) -> tuple[list[PolishedSection], RunningNotes]:
     """Polish one chunk with rolling context. Returns sections + updated notes."""
     s = get_settings()
 
+    # User-supplied speaker hints get passed on every chunk (cheap, short text).
+    # The polish.md system prompt explains how to use them.
+    hints_block = ""
+    if speaker_hints:
+        bullets = "\n".join(
+            f"- {h.get('name', '?')}: {h.get('description', '')}".rstrip(": ")
+            for h in speaker_hints
+        )
+        hints_block = (
+            f"<speaker_hints>\n"
+            f"User-supplied speaker hints. Use these to map anonymous SPEAKER_XX labels "
+            f"to real names ONLY when the transcript content makes the mapping unambiguous. "
+            f"When unsure, keep SPEAKER_XX.\n"
+            f"{bullets}\n"
+            f"</speaker_hints>\n\n"
+        )
+
     context = notes.to_context_block()
     if context:
         user_content = (
+            f"{hints_block}"
             f"This is chunk {chunk_idx} of {total_chunks}. Earlier chunks established the "
             f"context below — use it to correct misrecognized names/terms in this chunk, "
             f"maintain consistent speaker attribution, and continue ongoing topics gracefully.\n\n"
@@ -242,6 +261,7 @@ async def _polish_chunk(
         )
     else:
         user_content = (
+            f"{hints_block}"
             f"This is chunk {chunk_idx} of {total_chunks} (the first one — no prior context). "
             f"Polish the transcript per the rules. Then in running_notes_update, capture "
             f"the foundational context (topic, key terms, speakers, open threads) that "
@@ -311,6 +331,7 @@ async def polish(
     segments: list[Segment],
     on_progress: Optional[Callable[[int, str], None]] = None,
     control: Optional["JobControl"] = None,
+    speaker_hints: list[dict] | None = None,
 ) -> PolishedTranscript:
     """Polish the transcript with rolling-context chunking.
 
@@ -318,6 +339,10 @@ async def polish(
     about names/terms/speakers compounds across the whole recording — this
     materially raises quality when using smaller Whisper models that produce
     more ASR errors.
+
+    Optional speaker_hints (list of {name, description}) are passed into every
+    chunk's user message; Claude uses them to map SPEAKER_XX → real names when
+    transcript content makes the mapping unambiguous.
     """
     cb = on_progress or (lambda pct, msg: None)
 
@@ -342,7 +367,11 @@ async def polish(
         )
         cb(int(5 + (i - 1) / len(chunks) * 85), msg)
         sections, notes = await _polish_chunk(
-            _format_segments(chunk), chunk_idx=i, total_chunks=len(chunks), notes=notes
+            _format_segments(chunk),
+            chunk_idx=i,
+            total_chunks=len(chunks),
+            notes=notes,
+            speaker_hints=speaker_hints,
         )
         all_sections.extend(sections)
 

@@ -25,6 +25,20 @@ header {
   max-width: 760px;
   margin: 0 auto;
 }
+#home-link {
+  display: inline-block;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+#home-link:hover { opacity: 0.7; }
+#home-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+#home-link h1 { margin-top: 0; }
 .app-icon {
   display: block;
   margin: 0 auto 1em;
@@ -248,6 +262,101 @@ main {
   color: var(--muted);
   font-size: 10pt;
   margin-top: 1em;
+}
+
+/* ───── Diarization hints ───── */
+.diarization-hints {
+  margin: 1.5em 0 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+.diarization-hints summary {
+  cursor: pointer;
+  padding: 0.9em 1.2em;
+  font-size: 10pt;
+  color: var(--ink);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+.diarization-hints summary::-webkit-details-marker { display: none; }
+.diarization-hints summary::before {
+  content: "▸";
+  font-size: 9pt;
+  color: var(--muted);
+  transition: transform 150ms;
+  display: inline-block;
+}
+.diarization-hints[open] summary::before {
+  transform: rotate(90deg);
+}
+.hint-tag {
+  font-size: 8.5pt;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+.hints-body {
+  padding: 0 1.2em 1.2em;
+  border-top: 1px solid var(--line);
+  padding-top: 1em;
+}
+.hints-blurb {
+  margin: 0 0 1em;
+  font-size: 9.5pt;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.hints-blurb code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9pt;
+  background: var(--bg);
+  padding: 0.05em 0.4em;
+  border-radius: 3px;
+}
+.hints-field {
+  display: block;
+  margin-bottom: 1em;
+}
+.hints-field:last-child { margin-bottom: 0; }
+.hints-label-text {
+  display: block;
+  font-size: 9.5pt;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 0.4em;
+}
+.hints-sub {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 9pt;
+  margin-left: 0.4em;
+}
+.hints-field input[type="number"],
+.hints-field textarea {
+  width: 100%;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--sans);
+  font-size: 10pt;
+  color: var(--ink);
+  background: var(--bg);
+  transition: border-color 120ms;
+}
+.hints-field input[type="number"] { max-width: 180px; }
+.hints-field textarea { font-family: ui-monospace, "SF Mono", Menlo, monospace; resize: vertical; line-height: 1.5; }
+.hints-field input:focus,
+.hints-field textarea:focus {
+  outline: none;
+  border-color: var(--ink);
 }
 
 .btn-start {

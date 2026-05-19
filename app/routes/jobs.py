@@ -15,9 +15,32 @@ from app.audio import (
 from app.config import EXPORTS_DIR, get_settings
 from app.events import ProgressEvent, get_bus
 from app.jobs import get_store
-from app.models import Job, JobPhase, JobStatus
+from app.models import Job, JobPhase, JobStatus, SpeakerHint
 from app.pipeline import run_pipeline, run_polish_only, spawn
 from app.transcribe import AVAILABLE_WHISPER_MODELS
+
+
+def _parse_speaker_hints(text: str | None) -> list[SpeakerHint]:
+    """Parse a multiline 'Name: description' textarea into structured hints.
+
+    Accepts ':', '—', '–', and '-' as the name/description separator.
+    Lines with no separator are treated as name-only.
+    """
+    if not text:
+        return []
+    hints: list[SpeakerHint] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        for sep in (":", "—", "–", "-"):
+            if sep in line:
+                name, _, desc = line.partition(sep)
+                hints.append(SpeakerHint(name=name.strip(), description=desc.strip()))
+                break
+        else:
+            hints.append(SpeakerHint(name=line))
+    return hints
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -32,6 +55,8 @@ async def list_jobs() -> list[Job]:
 async def create_job(
     file: UploadFile = File(...),
     whisper_model: str | None = Form(None),
+    expected_speakers: int | None = Form(None),
+    speaker_hints: str | None = Form(None),
 ) -> Job:
     s = get_settings()
     store = get_store()
@@ -54,10 +79,24 @@ async def create_job(
             f"Choose one of: {AVAILABLE_WHISPER_MODELS}",
         )
 
+    # Validate expected_speakers if provided.
+    if expected_speakers is not None and not (1 <= expected_speakers <= 20):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "expected_speakers must be between 1 and 20",
+        )
+
+    parsed_hints = _parse_speaker_hints(speaker_hints)
+
     job = store.create(original_filename=file.filename or f"audio{ext}")
-    # Snapshot the currently-configured Claude polish model on the job so the
-    # history view can show it later, even if the env var changes.
-    store.update(job.id, whisper_model=chosen_model, polish_model=s.claude_model)
+    # Snapshot models + diarization hints so they survive in history.
+    store.update(
+        job.id,
+        whisper_model=chosen_model,
+        polish_model=s.claude_model,
+        expected_speakers=expected_speakers,
+        speaker_hints=parsed_hints,
+    )
     work_dir = store.dir(job.id)
     original_path = work_dir / f"original{ext}"
 

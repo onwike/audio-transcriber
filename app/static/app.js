@@ -216,6 +216,17 @@
     upload(file);
   });
 
+  // ─── Clickable logo / title → return to upload screen ───
+  $('home-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (eventSource) eventSource.close();
+    stopElapsedTimer();
+    hideError();
+    clearStaged();
+    currentJobId = null;
+    show('upload');
+  });
+
   // ─── Upload + subscribe ───
   async function upload(file) {
     hideError();
@@ -231,6 +242,12 @@
     formData.append('file', file);
     const selectedModel = document.querySelector('input[name="whisper_model"]:checked');
     if (selectedModel) formData.append('whisper_model', selectedModel.value);
+
+    // Diarization hints (both optional)
+    const expectedSpeakers = $('expected-speakers').value.trim();
+    if (expectedSpeakers) formData.append('expected_speakers', expectedSpeakers);
+    const speakerHintsText = $('speaker-hints').value.trim();
+    if (speakerHintsText) formData.append('speaker_hints', speakerHintsText);
 
     try {
       const res = await fetch('/jobs', { method: 'POST', body: formData });

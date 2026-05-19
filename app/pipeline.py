@@ -80,7 +80,10 @@ async def run_pipeline(job_id: str) -> None:
             # ── Diarize (optional, atomic — not pause/cancel checkpoint inside) ──
             if settings.enable_diarization:
                 emit(JobPhase.TRANSCRIBE, 96, "Identifying speakers…")
-                segments = await diarize_and_assign(normalized, segments)
+                expected = job_state.expected_speakers if job_state else None
+                segments = await diarize_and_assign(
+                    normalized, segments, expected_speakers=expected
+                )
                 check_cancel()
                 speakers = sorted({s.speaker for s in segments if s.speaker})
                 emit(
@@ -98,7 +101,13 @@ async def run_pipeline(job_id: str) -> None:
                 emit(JobPhase.POLISH, pct, msg)
 
             emit(JobPhase.POLISH, 0, "Polishing transcript with Claude…")
-            polished = await polish(segments, on_progress=on_polish, control=control)
+            hints = [h.model_dump() for h in (job_state.speaker_hints if job_state else [])]
+            polished = await polish(
+                segments,
+                on_progress=on_polish,
+                control=control,
+                speaker_hints=hints or None,
+            )
             save_polished(work_dir / "polished.json", polished)
             emit(JobPhase.POLISH, 100, f"Polished: «{polished.title}»")
             check_cancel()
@@ -173,7 +182,14 @@ async def run_polish_only(job_id: str) -> None:
                 emit(JobPhase.POLISH, pct, msg)
 
             emit(JobPhase.POLISH, 0, "Re-polishing transcript with Claude…")
-            polished = await polish(segments, on_progress=on_polish, control=control)
+            job_state = store.get(job_id)
+            hints = [h.model_dump() for h in (job_state.speaker_hints if job_state else [])]
+            polished = await polish(
+                segments,
+                on_progress=on_polish,
+                control=control,
+                speaker_hints=hints or None,
+            )
             save_polished(work_dir / "polished.json", polished)
             emit(JobPhase.POLISH, 100, f"Polished: «{polished.title}»")
 

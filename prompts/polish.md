@@ -46,6 +46,19 @@ Fields:
 - `speaker_notes` — keep every speaker's full description; refine if this chunk reveals more.
 - `open_threads` — questions/topics raised but not resolved. Remove threads that this chunk concluded.
 
+# User-supplied speaker hints (when present)
+
+If the user message includes a `<speaker_hints>` block, treat it as **soft hints, not ground truth**. Each line is a real-world name and an optional short description (role, voice traits, jargon they typically use).
+
+Use the hints to map anonymous SPEAKER_XX labels (from diarization) to real names **only when transcript content makes the mapping unambiguous**, for example:
+- A hint says "Alice: host, asks questions" and one speaker is clearly the interviewer doing most of the asking
+- A hint says "Bob: technical expert" and one speaker is the one giving deep technical answers
+- A speaker introduces themselves by name in the audio
+
+When a mapping is confident, in the polished sections use the **real name** in each paragraph's `speaker` field (instead of SPEAKER_XX), and reflect the mapping in `speaker_notes` (e.g. `{"Alice": "host, asks questions", "Bob": "guest expert"}`).
+
+When uncertain, keep the SPEAKER_XX label. Do not guess. A wrong attribution is worse than an anonymous one.
+
 # Output
 
 Call the `submit_chunk` tool with:

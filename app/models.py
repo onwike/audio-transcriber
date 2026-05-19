@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JobStatus(str, Enum):
@@ -26,6 +26,11 @@ class JobPhase(str, Enum):
     EXPORT = "export"
 
 
+class SpeakerHint(BaseModel):
+    name: str
+    description: str = ""
+
+
 class Job(BaseModel):
     id: str
     status: JobStatus = JobStatus.PENDING
@@ -38,6 +43,8 @@ class Job(BaseModel):
     created_at: datetime
     whisper_model: str | None = None
     polish_model: str | None = None  # Claude model used for the polish pass
+    expected_speakers: int | None = None  # constrains pyannote min/max
+    speaker_hints: list[SpeakerHint] = Field(default_factory=list)
     title: str | None = None  # populated when polish completes
     export_md_filename: str | None = None
     export_pdf_filename: str | None = None

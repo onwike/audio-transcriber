@@ -15,3 +15,6 @@ app/temp/
 .ruff_cache/
 .mypy_cache/
 node_modules/
+
+# Icon source files — canonical copy lives at app/static/icon.svg
+/transcriber-icon-style-*

@@ -239,9 +239,16 @@ async def _polish_chunk(
         )
         hints_block = (
             f"<speaker_hints>\n"
-            f"User-supplied speaker hints. Use these to map anonymous SPEAKER_XX labels "
-            f"to real names ONLY when the transcript content makes the mapping unambiguous. "
-            f"When unsure, keep SPEAKER_XX.\n"
+            f"User-supplied speaker hints. These serve TWO purposes — see system prompt "
+            f"for full detail:\n"
+            f"  (1) Map SPEAKER_XX → real name when transcript content makes the mapping "
+            f"unambiguous. When unsure, keep SPEAKER_XX.\n"
+            f"  (2) AUTHORITATIVE SPELLING for these proper nouns anywhere in the body "
+            f"text. If the ASR contains an acoustically-similar but differently-spelled "
+            f"name (Whisper 'Aaron' but hint 'Erin'; 'Sara' but hint 'Sarah'; 'Catherine' "
+            f"but hint 'Katherine'), replace the ASR spelling with the hint's spelling. "
+            f"This is canonical ASR cleanup, not a content change — apply it aggressively "
+            f"from the first sentence.\n"
             f"{bullets}\n"
             f"</speaker_hints>\n\n"
         )

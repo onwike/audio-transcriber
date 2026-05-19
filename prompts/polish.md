@@ -105,16 +105,51 @@ Fields:
 
 # User-supplied speaker hints (when present)
 
-If the user message includes a `<speaker_hints>` block, treat it as **soft hints, not ground truth**. Each line is a real-world name and an optional short description.
+If the user message includes a `<speaker_hints>` block, treat it as **two distinct authoritative resources**:
 
-Use the hints to map anonymous SPEAKER_XX labels to real names **only when transcript content makes the mapping unambiguous**:
-- A hint says "Alice: host, asks questions" and one speaker is clearly the interviewer asking most of the questions
-- A hint says "Bob: technical expert" and one speaker is the one giving deep technical answers
+## 1. Mapping anonymous speaker labels to real names
+
+Use the hints to replace `SPEAKER_XX` labels with the real name **only when transcript content makes the mapping unambiguous**:
+- A hint says "Alice: host, asks questions" and one speaker is clearly the interviewer
+- A hint says "Bob: technical expert" and one speaker gives the technical answers
 - A speaker introduces themselves by name
 
-When you make a confident mapping, use the **real name** in each paragraph's `speaker` field (instead of SPEAKER_XX), and reflect it in `speaker_notes`.
+When uncertain about the mapping, keep `SPEAKER_XX`. A wrong attribution is worse than an anonymous one.
 
-When uncertain, keep the SPEAKER_XX label. A wrong attribution is worse than an anonymous one.
+When you make a confident mapping, reflect it in `speaker_notes` and use the real name in each paragraph's `speaker` field.
+
+## 2. Authoritative spelling for proper nouns in the body text
+
+Hint names are also the **canonical spelling** for those proper nouns wherever they appear in the transcript text — not just in speaker labels. This is one of the most important ASR cleanup signals you have.
+
+**Homophones in proper names are the #1 ASR error class.** If a hint provides "Erin" and the transcript contains the acoustically-identical "Aaron" in a plausible context (mentioning that person, addressing them, referencing their work), **replace it with the hint's spelling**. Same for other common homophone pairs:
+
+| ASR output | Hint says | What to do |
+|---|---|---|
+| Aaron | Erin | Replace with Erin |
+| Sara | Sarah | Replace with Sarah |
+| Allan / Allen | Alan | Replace with Alan |
+| Katherine / Kathryn | Catherine | Replace with Catherine |
+| Reichert | Reichardt | Replace with Reichardt |
+
+This is **ASR cleanup**, the same class of correction as fixing "their" → "there". It does NOT violate the zero-hallucination rule — you are correcting a recognition error using user-supplied ground truth, not inventing content.
+
+Apply this aggressively from the very first sentence. The hints exist precisely because the user knew these names would be mis-recognized.
+
+### Concrete example
+
+Hints: `Erin: project lead, mentions architecture often`
+
+ASR output for chunk 1:
+> [00:34] (SPEAKER_00) Yeah, Aaron flagged that in standup yesterday.
+
+❌ **Wrong** (preserves homophone despite hint):
+> [00:34] **SPEAKER_00**: Yeah, Aaron flagged that in standup yesterday.
+
+✅ **Right** (homophone fix via hint):
+> [00:34] **SPEAKER_00**: Yeah, Erin flagged that in standup yesterday.
+
+The mapping of which `SPEAKER_XX` is Erin can remain unresolved if speaker_00 hasn't been clearly identified — but the spelling of "Erin" inside the dialogue is fixed regardless.
 
 # Executive summary (final stitch only — `submit_stitch`)
 

@@ -4,6 +4,7 @@
     upload: $('screen-upload'),
     progress: $('screen-progress'),
     result: $('screen-result'),
+    history: $('screen-history'),
   };
   const dropzone = $('dropzone');
   const fileInput = $('file-input');
@@ -19,6 +20,9 @@
   function show(name) {
     Object.values(screens).forEach((s) => s.classList.remove('active'));
     screens[name].classList.add('active');
+    // Screen-entry hooks
+    if (name === 'upload') refreshHistoryCount();
+    if (name === 'history') loadHistory();
   }
 
   function showError(msg) {
@@ -45,6 +49,16 @@
     if (h > 0) return `${h}h ${m}m`;
     if (m > 0) return `${m}m ${ss}s`;
     return `${ss}s`;
+  }
+
+  function fmtRelative(iso) {
+    const date = new Date(iso);
+    const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diffSec < 60) return 'just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function fmtElapsed(secs) {
@@ -292,6 +306,160 @@
     }
   }
 
+  // ─── History ───
+  async function refreshHistoryCount() {
+    try {
+      const res = await fetch('/jobs');
+      if (!res.ok) return;
+      const jobs = await res.json();
+      const btn = $('view-history-btn');
+      if (jobs.length > 0) {
+        btn.classList.remove('hidden');
+        $('history-count').textContent = jobs.length;
+      } else {
+        btn.classList.add('hidden');
+      }
+    } catch (e) {
+      // Silent — button just won't show if endpoint unreachable.
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch('/jobs');
+      if (!res.ok) throw new Error(`History fetch failed (${res.status})`);
+      const jobs = await res.json();
+      const list = $('history-list');
+      list.innerHTML = '';
+      if (jobs.length === 0) {
+        $('history-empty').classList.remove('hidden');
+      } else {
+        $('history-empty').classList.add('hidden');
+        for (const job of jobs) list.append(renderHistoryItem(job));
+      }
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  function renderHistoryItem(job) {
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    li.dataset.jobId = job.id;
+
+    // Header — title + status badge
+    const header = document.createElement('div');
+    header.className = 'history-item-header';
+
+    const title = document.createElement('h3');
+    title.className = 'history-title';
+    if (job.title) {
+      title.textContent = job.title;
+    } else {
+      title.classList.add('untitled');
+      title.textContent = job.original_filename || '(untitled)';
+    }
+
+    const badge = document.createElement('span');
+    badge.className = `status-badge ${job.status}`;
+    badge.textContent = job.status;
+
+    header.append(title, badge);
+    li.append(header);
+
+    // Meta line
+    const meta = document.createElement('p');
+    meta.className = 'history-meta';
+    const bits = [];
+    if (job.duration_seconds) bits.push(fmtDuration(job.duration_seconds));
+    if (job.whisper_model) bits.push(job.whisper_model);
+    if (job.created_at) bits.push(fmtRelative(job.created_at));
+    for (const text of bits) {
+      const span = document.createElement('span');
+      span.textContent = text;
+      meta.append(span);
+    }
+    li.append(meta);
+
+    // Error detail
+    if (job.status === 'error' && job.error) {
+      const err = document.createElement('p');
+      err.className = 'history-error-msg';
+      err.textContent = job.error;
+      li.append(err);
+    }
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'history-actions';
+
+    if (job.status === 'done') {
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => openJobFromHistory(job.id));
+
+      const pdf = document.createElement('a');
+      pdf.className = 'btn btn-primary';
+      pdf.href = `/jobs/${job.id}/download/pdf`;
+      pdf.textContent = 'PDF';
+      pdf.setAttribute('download', '');
+
+      const md = document.createElement('a');
+      md.className = 'btn';
+      md.href = `/jobs/${job.id}/download/md`;
+      md.textContent = 'MD';
+      md.setAttribute('download', '');
+
+      actions.append(openBtn, pdf, md);
+    }
+
+    const spacer = document.createElement('span');
+    spacer.className = 'spacer';
+    actions.append(spacer);
+
+    const del = document.createElement('button');
+    del.className = 'btn btn-text';
+    del.type = 'button';
+    del.textContent = 'Delete';
+    del.addEventListener('click', () => deleteJobFromHistory(job.id, job.title || job.original_filename));
+    actions.append(del);
+
+    li.append(actions);
+    return li;
+  }
+
+  async function openJobFromHistory(jobId) {
+    currentJobId = jobId;
+    await loadResult(jobId);
+  }
+
+  async function deleteJobFromHistory(jobId, label) {
+    if (!confirm(`Delete "${label}"?\n\nThis removes the PDF, Markdown, and all working files. This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/jobs/${jobId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || `Delete failed (${res.status})`);
+      }
+      if (currentJobId === jobId) currentJobId = null;
+      await loadHistory();
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  // ─── Navigation buttons ───
+  $('view-history-btn').addEventListener('click', () => show('history'));
+  $('view-history-from-result-btn').addEventListener('click', () => show('history'));
+  $('new-from-history-btn').addEventListener('click', () => {
+    hideError();
+    fileInput.value = '';
+    currentJobId = null;
+    show('upload');
+  });
+
   // ─── Buttons ───
   $('restart-btn').addEventListener('click', () => {
     if (eventSource) eventSource.close();
@@ -338,6 +506,9 @@
       showError(e.message);
     }
   });
+
+  // ─── Initial state: populate history count on first load ───
+  refreshHistoryCount();
 
   $('repolish-btn').addEventListener('click', async () => {
     if (!currentJobId) return;

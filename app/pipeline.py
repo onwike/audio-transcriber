@@ -108,6 +108,7 @@ async def run_pipeline(job_id: str) -> None:
             md_path, pdf_path = await asyncio.to_thread(export_md_and_pdf, polished)
             store.update(
                 job_id,
+                title=polished.title,
                 export_md_filename=md_path.name,
                 export_pdf_filename=pdf_path.name,
             )
@@ -175,6 +176,7 @@ async def run_polish_only(job_id: str) -> None:
             md_path, pdf_path = await asyncio.to_thread(export_md_and_pdf, polished)
             store.update(
                 job_id,
+                title=polished.title,
                 export_md_filename=md_path.name,
                 export_pdf_filename=pdf_path.name,
             )

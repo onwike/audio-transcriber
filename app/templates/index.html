@@ -17,6 +17,11 @@
 
   <main>
     <section id="screen-upload" class="screen active">
+      <div class="screen-nav">
+        <button id="view-history-btn" class="btn-link hidden" type="button">
+          View history (<span id="history-count">0</span>)
+        </button>
+      </div>
       <label class="dropzone" id="dropzone">
         <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.m4a,.wav,.flac,.ogg,.oga,.opus,.aac,.webm,.mp4,.wma" hidden>
         <div class="dropzone-text">
@@ -82,9 +87,18 @@
         <a id="download-pdf" class="btn btn-primary" download>Download PDF</a>
         <a id="download-md" class="btn" download>Download Markdown</a>
         <button id="repolish-btn" class="btn btn-secondary">Re-polish</button>
-        <button id="restart-btn" class="btn btn-text">Start over</button>
+        <button id="view-history-from-result-btn" class="btn btn-text">History</button>
+        <button id="restart-btn" class="btn btn-text">New transcription</button>
       </div>
       <article id="transcript-preview" class="transcript-preview"></article>
+    </section>
+
+    <section id="screen-history" class="screen">
+      <div class="screen-nav">
+        <button id="new-from-history-btn" class="btn btn-primary" type="button">+ New transcription</button>
+      </div>
+      <ol id="history-list" class="history-list"></ol>
+      <p id="history-empty" class="history-empty hidden">No transcriptions yet. Drop an audio file on the previous screen to make your first one.</p>
     </section>
 
     <div id="error-banner" class="error-banner hidden">

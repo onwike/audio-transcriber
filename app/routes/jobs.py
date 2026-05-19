@@ -22,6 +22,12 @@ from app.transcribe import AVAILABLE_WHISPER_MODELS
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
+@router.get("", response_model=list[Job])
+async def list_jobs() -> list[Job]:
+    """All known jobs, newest-first. Used by the History view."""
+    return get_store().list_all()
+
+
 @router.post("", response_model=Job, status_code=status.HTTP_201_CREATED)
 async def create_job(
     file: UploadFile = File(...),

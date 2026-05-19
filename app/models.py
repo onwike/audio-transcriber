@@ -37,6 +37,7 @@ class Job(BaseModel):
     duration_seconds: float | None = None
     created_at: datetime
     whisper_model: str | None = None
+    title: str | None = None  # populated when polish completes
     export_md_filename: str | None = None
     export_pdf_filename: str | None = None
 

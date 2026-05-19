@@ -42,6 +42,13 @@ async def lifespan(app: FastAPI):
         )
     logger.info("Preflight passed ✓")
 
+    # ─── Rebuild job index from disk (history) ───────────────────────
+    from app.jobs import get_store
+
+    loaded = get_store().load_from_disk()
+    if loaded:
+        logger.info("Loaded %d historical job(s) from disk", loaded)
+
     # ─── Pre-download all togglable Whisper models ───────────────────
     # Snapshot weights to disk so the user can pick any model in the UI
     # without waiting on a mid-pipeline download. Lazy-loaded into RAM

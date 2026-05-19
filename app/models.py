@@ -36,6 +36,7 @@ class Job(BaseModel):
     original_filename: str
     duration_seconds: float | None = None
     created_at: datetime
+    whisper_model: str | None = None
     export_md_filename: str | None = None
     export_pdf_filename: str | None = None
 

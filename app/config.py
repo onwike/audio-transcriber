@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     claude_model: str = "claude-haiku-4-5-20251001"
 
-    whisper_model: str = "large-v3"
+    whisper_model: str = "large-v3-turbo"
     whisper_compute_type: str = "int8"
     whisper_device: str = "auto"
 

@@ -14,7 +14,25 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_model = None  # faster_whisper.WhisperModel
+# Models the user can pick between in the UI. Order matters — it's the
+# display order in the picker.
+AVAILABLE_WHISPER_MODELS: list[str] = [
+    "small",
+    "medium",
+    "large-v3-turbo",
+    "large-v3",
+]
+
+# Map of short name → HF repo. faster-whisper accepts short names directly
+# but snapshot_download needs full repo IDs.
+_HF_REPO = {
+    "small": "Systran/faster-whisper-small",
+    "medium": "Systran/faster-whisper-medium",
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large-v3-turbo": "Systran/faster-whisper-large-v3-turbo",
+}
+
+_models: dict[str, object] = {}  # name → WhisperModel
 _diarizer = None  # pyannote.audio.Pipeline
 
 
@@ -27,23 +45,53 @@ class Segment:
     words: list[dict] = field(default_factory=list)
 
 
-def load_whisper(model_size: str, device: str, compute_type: str) -> None:
-    global _model
-    if _model is not None:
-        return
+def predownload_whisper_models(names: list[str]) -> None:
+    """Ensure model snapshots are present in the HF cache.
+
+    Doesn't load into RAM — that happens lazily on first transcribe.
+    snapshot_download is idempotent: re-running with cached weights is fast.
+    """
+    from huggingface_hub import snapshot_download
+
+    for name in names:
+        repo = _HF_REPO.get(name)
+        if not repo:
+            logger.warning("No HF repo mapping for '%s'; skipping pre-download", name)
+            continue
+        logger.info("Pre-downloading Whisper model '%s' (%s)…", name, repo)
+        snapshot_download(repo)
+    logger.info("All Whisper model weights cached on disk")
+
+
+def _resolve_device(device: str) -> str:
+    if device != "auto":
+        return device
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
+
+
+def get_or_load_whisper(name: str, device: str, compute_type: str):
+    """Return a WhisperModel for `name`, loading into RAM on first use."""
+    cached = _models.get(name)
+    if cached is not None:
+        return cached
 
     from faster_whisper import WhisperModel
 
-    if device == "auto":
-        try:
-            import torch
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        except ImportError:
-            device = "cpu"
+    resolved_device = _resolve_device(device)
+    logger.info("Loading faster-whisper '%s' on %s (%s)…", name, resolved_device, compute_type)
+    model = WhisperModel(name, device=resolved_device, compute_type=compute_type)
+    _models[name] = model
+    logger.info("faster-whisper '%s' ready", name)
+    return model
 
-    logger.info("Loading faster-whisper %s on %s (%s)…", model_size, device, compute_type)
-    _model = WhisperModel(model_size, device=device, compute_type=compute_type)
-    logger.info("faster-whisper ready")
+
+def load_whisper(model_size: str, device: str, compute_type: str) -> None:
+    """Warm-load the default model. Kept as a stable name for lifespan callers."""
+    get_or_load_whisper(model_size, device, compute_type)
 
 
 def load_diarizer(token: str) -> None:
@@ -73,13 +121,14 @@ def load_diarizer(token: str) -> None:
 
 
 def _sync_transcribe(
+    model,
     wav_path: Path,
     on_progress: Callable[[float], None],
     control: Optional["JobControl"] = None,
 ) -> tuple[list[Segment], dict]:
-    if _model is None:
+    if model is None:
         raise RuntimeError("Whisper model not loaded")
-    segments_iter, info = _model.transcribe(
+    segments_iter, info = model.transcribe(
         str(wav_path),
         beam_size=5,
         word_timestamps=True,
@@ -113,18 +162,32 @@ def _sync_transcribe(
 
 async def transcribe(
     wav_path: Path,
+    model_name: str,
     on_progress: Optional[Callable[[float], None]] = None,
     control: Optional["JobControl"] = None,
 ) -> tuple[list[Segment], dict]:
-    """Run Whisper transcription off-loop. Progress callback fires on event loop thread."""
+    """Run Whisper transcription off-loop with the named model.
+
+    The model is loaded into RAM on first use; cached for subsequent jobs.
+    Progress callback fires on the event loop thread.
+    """
+    from app.config import get_settings
+    s = get_settings()
+
+    # Loading the model is itself blocking — run in the executor so we
+    # don't pin the event loop on a cold cache hit.
     loop = asyncio.get_running_loop()
+    model = await loop.run_in_executor(
+        None, get_or_load_whisper, model_name, s.whisper_device, s.whisper_compute_type
+    )
+
     user_cb = on_progress or (lambda p: None)
 
     def thread_safe_cb(p: float) -> None:
         loop.call_soon_threadsafe(user_cb, p)
 
     return await loop.run_in_executor(
-        None, _sync_transcribe, wav_path, thread_safe_cb, control
+        None, _sync_transcribe, model, wav_path, thread_safe_cb, control
     )
 
 

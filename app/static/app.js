@@ -180,6 +180,8 @@
 
     const formData = new FormData();
     formData.append('file', file);
+    const selectedModel = document.querySelector('input[name="whisper_model"]:checked');
+    if (selectedModel) formData.append('whisper_model', selectedModel.value);
 
     try {
       const res = await fetch('/jobs', { method: 'POST', body: formData });

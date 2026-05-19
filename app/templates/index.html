@@ -25,6 +25,33 @@
         </div>
         <div class="dropzone-formats">mp3 · m4a · wav · flac · ogg · opus · webm · mp4 · aac</div>
       </label>
+
+      <fieldset class="model-picker" aria-label="Whisper model">
+        <legend>Whisper model</legend>
+        <div class="model-options">
+          <label class="model-option">
+            <input type="radio" name="whisper_model" value="small">
+            <span class="model-name">Small</span>
+            <span class="model-note">fastest · noticeable accuracy drop</span>
+          </label>
+          <label class="model-option">
+            <input type="radio" name="whisper_model" value="medium">
+            <span class="model-name">Medium</span>
+            <span class="model-note">balanced · small accuracy drop</span>
+          </label>
+          <label class="model-option">
+            <input type="radio" name="whisper_model" value="large-v3-turbo" checked>
+            <span class="model-name">Turbo</span>
+            <span class="model-note">recommended · 5× faster than large‑v3</span>
+          </label>
+          <label class="model-option">
+            <input type="radio" name="whisper_model" value="large-v3">
+            <span class="model-name">Large v3</span>
+            <span class="model-note">slowest · highest accuracy</span>
+          </label>
+        </div>
+      </fieldset>
+
       <p class="hint">Long audio is fine — chunking is automatic.</p>
     </section>
 

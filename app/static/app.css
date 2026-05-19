@@ -95,6 +95,63 @@ main {
   margin-top: 1em;
 }
 
+/* ───── Whisper model picker ───── */
+.model-picker {
+  border: none;
+  padding: 0;
+  margin: 2em 0 0;
+}
+.model-picker legend {
+  font-size: 9pt;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.8em;
+  padding: 0;
+}
+.model-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5em;
+}
+@media (max-width: 640px) {
+  .model-options { grid-template-columns: repeat(2, 1fr); }
+}
+.model-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.9em 0.8em;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+.model-option:hover {
+  border-color: #b0b0b0;
+}
+.model-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.model-option:has(input[type="radio"]:checked) {
+  border-color: var(--ink);
+  background: #f5f3ec;
+}
+.model-name {
+  font-family: var(--serif);
+  font-size: 12pt;
+  font-weight: 600;
+  color: var(--ink);
+}
+.model-note {
+  font-size: 9pt;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
 /* ───── Progress ───── */
 .job-meta {
   margin-bottom: 2em;

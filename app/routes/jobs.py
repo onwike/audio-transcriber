@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from app.audio import (
@@ -17,12 +17,16 @@ from app.events import ProgressEvent, get_bus
 from app.jobs import get_store
 from app.models import Job, JobPhase, JobStatus
 from app.pipeline import run_pipeline, run_polish_only, spawn
+from app.transcribe import AVAILABLE_WHISPER_MODELS
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 @router.post("", response_model=Job, status_code=status.HTTP_201_CREATED)
-async def create_job(file: UploadFile = File(...)) -> Job:
+async def create_job(
+    file: UploadFile = File(...),
+    whisper_model: str | None = Form(None),
+) -> Job:
     s = get_settings()
     store = get_store()
 
@@ -33,7 +37,19 @@ async def create_job(file: UploadFile = File(...)) -> Job:
             f"Unsupported format '{ext}'. Allowed: {sorted(ACCEPTED_FORMATS)}",
         )
 
+    # Resolve the Whisper model: explicit form field > env default. Validate
+    # against the picker's allowlist so the front-end can't request models
+    # we haven't pre-downloaded.
+    chosen_model = whisper_model or s.whisper_model
+    if chosen_model not in AVAILABLE_WHISPER_MODELS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Unsupported whisper_model '{chosen_model}'. "
+            f"Choose one of: {AVAILABLE_WHISPER_MODELS}",
+        )
+
     job = store.create(original_filename=file.filename or f"audio{ext}")
+    store.update(job.id, whisper_model=chosen_model)
     work_dir = store.dir(job.id)
     original_path = work_dir / f"original{ext}"
 

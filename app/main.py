@@ -42,12 +42,27 @@ async def lifespan(app: FastAPI):
         )
     logger.info("Preflight passed ✓")
 
-    # ─── Warm-load models off the event loop ─────────────────────────
-    # Only reached if preflight cleared. First run downloads ~3 GB.
-    from app.transcribe import load_diarizer, load_whisper
+    # ─── Pre-download all togglable Whisper models ───────────────────
+    # Snapshot weights to disk so the user can pick any model in the UI
+    # without waiting on a mid-pipeline download. Lazy-loaded into RAM
+    # on first use. Idempotent — re-runs are fast if cache is warm.
+    from app.transcribe import (
+        AVAILABLE_WHISPER_MODELS,
+        load_diarizer,
+        load_whisper,
+        predownload_whisper_models,
+    )
 
-    logger.info("Warming up models (first run downloads model weights — may take several minutes)…")
+    logger.info(
+        "Pre-downloading Whisper models: %s (first run only — ~6.6 GB total, may take several minutes)…",
+        ", ".join(AVAILABLE_WHISPER_MODELS),
+    )
+    await asyncio.to_thread(predownload_whisper_models, AVAILABLE_WHISPER_MODELS)
+
+    # Warm-load the default into RAM so the first transcription is fast.
+    logger.info("Warm-loading default Whisper model into RAM: %s", s.whisper_model)
     await asyncio.to_thread(load_whisper, s.whisper_model, s.whisper_device, s.whisper_compute_type)
+
     if s.enable_diarization:
         await asyncio.to_thread(load_diarizer, s.huggingface_token)
     logger.info("Models loaded; server ready")

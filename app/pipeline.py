@@ -63,7 +63,12 @@ async def run_pipeline(job_id: str) -> None:
                 pct = int(p * 95) if settings.enable_diarization else int(p * 100)
                 emit(JobPhase.TRANSCRIBE, pct, f"Transcribing… {int(p * 100)}%")
 
-            segments, info = await transcribe(normalized, on_progress=on_progress, control=control)
+            # Use the model the user picked at upload; fall back to env default.
+            job_state = store.get(job_id)
+            model_name = (job_state.whisper_model if job_state else None) or settings.whisper_model
+            segments, info = await transcribe(
+                normalized, model_name, on_progress=on_progress, control=control
+            )
             check_cancel()
             lang = info.get("language") or "unknown"
             emit(

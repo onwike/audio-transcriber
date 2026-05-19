@@ -314,34 +314,33 @@ async def _polish_chunk(
 async def _final_stitch(notes: RunningNotes) -> tuple[str, str]:
     """Generate a title + executive summary from accumulated running notes.
 
-    The executive summary is the ONE place summarization happens — it lives at
-    the top of the document so a reader can get the TLDR before diving into
-    the verbatim transcript body.
+    Uses the same cached system prompt as the per-chunk polish — so the
+    zero-hallucination + summary-grounding rules from polish.md apply with
+    full force. The user message just describes the stitch-specific task.
     """
     s = get_settings()
     context = notes.to_context_block() or "(no context accumulated)"
     response = await _client().messages.create(
         model=s.claude_model,
         max_tokens=2048,
+        system=[{
+            "type": "text",
+            "text": _system_prompt(),
+            "cache_control": {"type": "ephemeral"},
+        }],
         tools=[STITCH_TOOL],
         tool_choice={"type": "tool", "name": "submit_stitch"},
         messages=[{"role": "user", "content": (
-            "Below are the cumulative running notes built up across all chunks of a "
-            "transcript. Generate the document's title and executive summary.\n\n"
-            "**Title**: factual, descriptive, under 80 characters. No clickbait, no "
-            "marketing tone.\n\n"
-            "**Executive summary**: 2–4 paragraphs, roughly 100–250 words total, "
-            "professional plain prose. This is the TLDR for someone who wants the gist "
-            "before reading the full verbatim transcript. Cover:\n"
-            "  • what the recording is (kind of conversation, format, setting)\n"
-            "  • who the main speakers are and what roles they play\n"
-            "  • the major topics discussed, in roughly the order they appeared\n"
-            "  • key conclusions, decisions, or takeaways\n"
-            "  • anything genuinely noteworthy (a surprising claim, a major announcement, "
-            "a heated disagreement)\n\n"
-            "Use double newlines (\\n\\n) between paragraphs. No marketing language, no "
-            "editorializing, no spoilers framed as teases. Call submit_stitch.\n\n"
-            f"{context}"
+            "Generate the document's title and executive summary from the cumulative "
+            "running notes below. Follow the **Executive summary** rules from the system "
+            "prompt: every claim must trace back to spoken content, no editorial "
+            "interpretation, no manufactured insight, be miserly. The zero-hallucination "
+            "rule applies fully — do not invent anything.\n\n"
+            "**Title**: factual, descriptive, under 80 characters. No clickbait.\n\n"
+            "**Executive summary**: 100–250 words across 2–4 paragraphs (use \\n\\n "
+            "between paragraphs). If there is less to say than 250 words, say less.\n\n"
+            "Call submit_stitch.\n\n"
+            f"<running_notes>\n{context}\n</running_notes>"
         )}],
     )
     for block in response.content:

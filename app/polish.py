@@ -246,26 +246,36 @@ async def _polish_chunk(
             f"</speaker_hints>\n\n"
         )
 
+    verbatim_reminder = (
+        "REMINDER: `sections` must contain the FULL VERBATIM transcript of this chunk, "
+        "with only the cleanup allowed in the system prompt (ASR fixes, light disfluency "
+        "removal, punctuation, paragraph breaks, speaker labels). Do NOT condense, "
+        "paraphrase, or summarize the spoken content. Every sentence the speaker said "
+        "appears in `sections`. The user-facing summary is generated separately, later — "
+        "it does NOT belong here.\n\n"
+    )
+
     context = notes.to_context_block()
     if context:
         user_content = (
             f"{hints_block}"
+            f"{verbatim_reminder}"
             f"This is chunk {chunk_idx} of {total_chunks}. Earlier chunks established the "
             f"context below — use it to correct misrecognized names/terms in this chunk, "
             f"maintain consistent speaker attribution, and continue ongoing topics gracefully.\n\n"
             f"<previous_context>\n{context}\n</previous_context>\n\n"
             f"<transcript>\n{formatted}\n</transcript>\n\n"
-            f"Call submit_chunk with the polished sections AND the updated cumulative "
-            f"running_notes_update (carry forward everything from previous_context, plus "
-            f"anything new from this chunk)."
+            f"Call submit_chunk with the verbatim polished sections AND the updated "
+            f"cumulative running_notes_update."
         )
     else:
         user_content = (
             f"{hints_block}"
+            f"{verbatim_reminder}"
             f"This is chunk {chunk_idx} of {total_chunks} (the first one — no prior context). "
-            f"Polish the transcript per the rules. Then in running_notes_update, capture "
-            f"the foundational context (topic, key terms, speakers, open threads) that "
-            f"subsequent chunks will build on.\n\n"
+            f"Polish the transcript verbatim per the rules. Then in running_notes_update, "
+            f"capture the foundational internal context (topic, key terms, speakers, open "
+            f"threads) that subsequent chunks will build on.\n\n"
             f"<transcript>\n{formatted}\n</transcript>\n\n"
             f"Call submit_chunk."
         )
@@ -302,19 +312,35 @@ async def _polish_chunk(
 
 
 async def _final_stitch(notes: RunningNotes) -> tuple[str, str]:
-    """Generate a title + 2-3 sentence summary from accumulated running notes."""
+    """Generate a title + executive summary from accumulated running notes.
+
+    The executive summary is the ONE place summarization happens — it lives at
+    the top of the document so a reader can get the TLDR before diving into
+    the verbatim transcript body.
+    """
     s = get_settings()
     context = notes.to_context_block() or "(no context accumulated)"
     response = await _client().messages.create(
         model=s.claude_model,
-        max_tokens=1024,
+        max_tokens=2048,
         tools=[STITCH_TOOL],
         tool_choice={"type": "tool", "name": "submit_stitch"},
         messages=[{"role": "user", "content": (
             "Below are the cumulative running notes built up across all chunks of a "
-            "long transcript. Synthesize a single factual, descriptive title (under 80 "
-            "chars, no clickbait) and a neutral 2–3 sentence summary covering the whole "
-            "transcript. Call submit_stitch.\n\n"
+            "transcript. Generate the document's title and executive summary.\n\n"
+            "**Title**: factual, descriptive, under 80 characters. No clickbait, no "
+            "marketing tone.\n\n"
+            "**Executive summary**: 2–4 paragraphs, roughly 100–250 words total, "
+            "professional plain prose. This is the TLDR for someone who wants the gist "
+            "before reading the full verbatim transcript. Cover:\n"
+            "  • what the recording is (kind of conversation, format, setting)\n"
+            "  • who the main speakers are and what roles they play\n"
+            "  • the major topics discussed, in roughly the order they appeared\n"
+            "  • key conclusions, decisions, or takeaways\n"
+            "  • anything genuinely noteworthy (a surprising claim, a major announcement, "
+            "a heated disagreement)\n\n"
+            "Use double newlines (\\n\\n) between paragraphs. No marketing language, no "
+            "editorializing, no spoilers framed as teases. Call submit_stitch.\n\n"
             f"{context}"
         )}],
     )

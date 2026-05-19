@@ -569,6 +569,12 @@ main {
   border: none;
   padding: 0;
 }
+.transcript-preview blockquote p {
+  margin: 0 0 0.7em;
+}
+.transcript-preview blockquote p:last-child {
+  margin-bottom: 0;
+}
 .transcript-preview h2 {
   font-size: 14pt;
   margin: 2em 0 0.2em;

@@ -22,11 +22,28 @@ except (ImportError, OSError) as e:  # missing native libs (Pango, Cairo)
     _weasyprint_error = str(e)
 
 
+def _summary_as_blockquote(summary: str) -> str:
+    """Render a (potentially multi-paragraph) summary as a markdown blockquote.
+
+    Markdown blockquotes need every line prefixed with '> ', and an empty
+    quoted line ('>') between paragraphs. textContent-style '\\n\\n' joined
+    into one '> ...' line would render as a single mushed paragraph.
+    """
+    lines = summary.split("\n")
+    out: list[str] = []
+    for line in lines:
+        if line.strip():
+            out.append(f"> {line}")
+        else:
+            out.append(">")
+    return "\n".join(out)
+
+
 def _render_markdown(polished: PolishedTranscript) -> str:
     out: list[str] = [
         f"# {polished.title}",
         "",
-        f"> {polished.summary}",
+        _summary_as_blockquote(polished.summary),
         "",
         "---",
         "",

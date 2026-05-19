@@ -336,7 +336,15 @@
     const h1 = document.createElement('h1');
     h1.textContent = p.title;
     const bq = document.createElement('blockquote');
-    bq.textContent = p.summary;
+    // Multi-paragraph summary — split on double newlines and emit a <p> per chunk
+    const paragraphs = (p.summary || '').split(/\n{2,}/);
+    for (const para of paragraphs) {
+      const text = para.trim();
+      if (!text) continue;
+      const pEl = document.createElement('p');
+      pEl.textContent = text;
+      bq.append(pEl);
+    }
     root.append(h1, bq);
 
     for (const section of p.sections) {

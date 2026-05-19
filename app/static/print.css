@@ -52,6 +52,12 @@ blockquote {
   margin: 1.5em 0 0 0;
   max-width: 95%;
 }
+blockquote p {
+  margin: 0 0 0.8em;
+}
+blockquote p:last-child {
+  margin-bottom: 0;
+}
 
 h2 + p > em:only-child {
   font-style: italic;

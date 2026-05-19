@@ -570,6 +570,23 @@
       watchBtn.textContent = 'Watch progress';
       watchBtn.addEventListener('click', () => watchJob(job.id));
       actions.append(watchBtn);
+    } else if (job.status === 'error') {
+      // Failed jobs whose Whisper transcript made it to disk can be polished
+      // from history without re-uploading audio. The transcript is saved as
+      // soon as phase advances past TRANSCRIBE, so phase=polish or phase=export
+      // at time of error means transcript.json exists.
+      const transcriptExists = job.phase === 'polish' || job.phase === 'export';
+      if (transcriptExists) {
+        const polishBtn = document.createElement('button');
+        polishBtn.className = 'btn btn-primary';
+        polishBtn.type = 'button';
+        polishBtn.textContent = 'Polish';
+        polishBtn.title = 'Retry the polish step using the saved transcript (no Whisper rerun)';
+        polishBtn.addEventListener('click', () =>
+          polishFromHistory(job.id, job.title || job.original_filename || '(re-polishing)')
+        );
+        actions.append(polishBtn);
+      }
     }
 
     const spacer = document.createElement('span');
@@ -590,6 +607,33 @@
   async function openJobFromHistory(jobId) {
     currentJobId = jobId;
     await loadResult(jobId);
+  }
+
+  async function polishFromHistory(jobId, label) {
+    // Kick off re-polish from a saved transcript and jump to the progress
+    // screen so the user can watch it run.
+    hideError();
+    currentJobId = jobId;
+    $('prog-filename').textContent = label;
+    $('prog-fileinfo').textContent = '(re-polishing existing transcript)';
+    resetPhases();
+    setPhaseActive('polish');
+    $('prog-message').textContent = 'Re-polishing…';
+    show('progress');
+    stopElapsedTimer();
+    startElapsedTimer();
+    try {
+      const res = await fetch(`/jobs/${jobId}/repolish`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || `Re-polish failed (${res.status})`);
+      }
+      subscribeToJob(jobId);
+    } catch (e) {
+      stopElapsedTimer();
+      show('history');  // back to history so the user can retry / delete
+      showError(e.message);
+    }
   }
 
   async function watchJob(jobId) {

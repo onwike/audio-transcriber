@@ -32,6 +32,36 @@ class SpeakerHint(BaseModel):
     description: str = ""
 
 
+class ErrorSource(str, Enum):
+    """Where an error came from — drives attribution + the right help links."""
+    ANTHROPIC = "anthropic"
+    HUGGINGFACE = "huggingface"
+    FFMPEG = "ffmpeg"
+    WEASYPRINT = "weasyprint"
+    NETWORK = "network"
+    USER = "user"           # bad input file, wrong format, etc.
+    INTERNAL = "internal"   # our bug — fallback
+
+
+class ErrorLink(BaseModel):
+    label: str
+    url: str
+
+
+class JobError(BaseModel):
+    """Structured error attribution shown in the UI.
+
+    `raw` carries the original technical message for debugging; `title`/`detail`
+    are what the user reads; `links` point to provider status pages, docs, or
+    config files relevant to the failure mode.
+    """
+    source: ErrorSource = ErrorSource.INTERNAL
+    title: str
+    detail: str
+    links: list[ErrorLink] = Field(default_factory=list)
+    raw: str | None = None
+
+
 class PhaseRun(BaseModel):
     """When a pipeline phase started and how long it ran.
 
@@ -61,6 +91,7 @@ class Job(BaseModel):
     export_pdf_filename: str | None = None
     phase_runs: dict[str, PhaseRun] = Field(default_factory=dict)  # per-phase timing
     completed_at: datetime | None = None  # when the pipeline finished (any outcome)
+    error_details: JobError | None = None  # structured error (populated on new jobs)
 
 
 class PolishedParagraph(BaseModel):

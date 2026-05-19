@@ -527,8 +527,10 @@
       li.append(progress);
     }
 
-    // Error detail
-    if (job.status === 'error' && job.error) {
+    // Error detail — structured (provider-attributed) takes priority over legacy string
+    if (job.status === 'error' && job.error_details) {
+      li.append(renderStructuredError(job.error_details));
+    } else if (job.status === 'error' && job.error) {
       const err = document.createElement('p');
       err.className = 'history-error-msg';
       err.textContent = job.error;
@@ -602,6 +604,63 @@
 
     li.append(actions);
     return li;
+  }
+
+  function renderStructuredError(err) {
+    // err = { source, title, detail, links: [{label, url}], raw }
+    const box = document.createElement('div');
+    box.className = 'history-error-box';
+
+    const header = document.createElement('div');
+    header.className = 'history-error-header';
+
+    const sourceBadge = document.createElement('span');
+    sourceBadge.className = `error-source-badge error-source-${err.source || 'internal'}`;
+    sourceBadge.textContent = (err.source || 'internal').toUpperCase();
+    header.append(sourceBadge);
+
+    const title = document.createElement('strong');
+    title.className = 'history-error-title';
+    title.textContent = err.title || 'Error';
+    header.append(title);
+
+    box.append(header);
+
+    if (err.detail) {
+      const detail = document.createElement('p');
+      detail.className = 'history-error-detail';
+      detail.textContent = err.detail;
+      box.append(detail);
+    }
+
+    if (err.links && err.links.length) {
+      const linksRow = document.createElement('div');
+      linksRow.className = 'history-error-links';
+      for (const link of err.links) {
+        const a = document.createElement('a');
+        a.href = link.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = link.label;
+        a.className = 'history-error-link';
+        linksRow.append(a);
+      }
+      box.append(linksRow);
+    }
+
+    if (err.raw) {
+      const details = document.createElement('details');
+      details.className = 'history-error-raw';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Raw technical detail';
+      details.append(summary);
+      const pre = document.createElement('pre');
+      pre.textContent = err.raw;
+      details.append(pre);
+      box.append(details);
+    }
+
+    return box;
   }
 
   async function openJobFromHistory(jobId) {

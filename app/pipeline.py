@@ -20,30 +20,6 @@ from app.transcribe import (
 logger = logging.getLogger(__name__)
 
 
-def _friendly_error(e: Exception) -> str:
-    """User-actionable error message for common transient API failures.
-
-    The full traceback still goes to the server log via logger.exception;
-    this is what the UI shows in the history row's error detail.
-    """
-    status = getattr(e, "status_code", None)
-    if status == 529:
-        return (
-            "Anthropic API was overloaded (returned 529 after retries). "
-            "The transcript is saved — click Re-polish to retry without re-running Whisper."
-        )
-    if status == 429:
-        return (
-            "Anthropic API rate limit hit. Wait a moment and click Re-polish."
-        )
-    if status and status >= 500:
-        return (
-            f"Anthropic API returned HTTP {status}. "
-            "The transcript is saved — click Re-polish to retry."
-        )
-    return str(e)
-
-
 # Single-user app: only one pipeline runs at a time. Additional submitted
 # jobs wait on this lock and surface as JobStatus.QUEUED in the UI.
 _pipeline_lock = asyncio.Lock()
@@ -248,15 +224,21 @@ async def run_pipeline(job_id: str) -> None:
 
         except Exception as e:
             logger.exception("Pipeline failed for job %s", job_id)
-            err_msg = _friendly_error(e)
+            from app.errors import classify_error
+            err = classify_error(e)
             store.mark_completed(job_id)
-            store.update(job_id, status=JobStatus.ERROR, error=err_msg)
+            store.update(
+                job_id,
+                status=JobStatus.ERROR,
+                error=f"{err.title}: {err.detail}",  # legacy string for back-compat
+                error_details=err,
+            )
             bus.publish(job_id, ProgressEvent(
                 phase=(store.get(job_id).phase or JobPhase.TRANSCRIBE).value,
                 percent=0,
-                message="Pipeline failed",
+                message=err.title,
                 status="error",
-                error=err_msg,
+                error=err.title,
             ))
 
 
@@ -336,13 +318,19 @@ async def run_polish_only(job_id: str) -> None:
 
         except Exception as e:
             logger.exception("Re-polish failed for job %s", job_id)
-            err_msg = _friendly_error(e)
+            from app.errors import classify_error
+            err = classify_error(e)
             store.mark_completed(job_id)
-            store.update(job_id, status=JobStatus.ERROR, error=err_msg)
+            store.update(
+                job_id,
+                status=JobStatus.ERROR,
+                error=f"{err.title}: {err.detail}",
+                error_details=err,
+            )
             bus.publish(job_id, ProgressEvent(
                 phase=JobPhase.POLISH.value,
                 percent=0,
-                message="Re-polish failed",
+                message=err.title,
                 status="error",
-                error=err_msg,
+                error=err.title,
             ))

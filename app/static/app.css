@@ -163,6 +163,103 @@ main {
   color: #a02020;
   word-break: break-word;
 }
+
+/* ───── Structured error box ───── */
+.history-error-box {
+  margin: 0.6em 0 1em;
+  padding: 0.9em 1em;
+  background: #fff8f7;
+  border: 1px solid #f0d4cf;
+  border-left: 3px solid #c0392b;
+  border-radius: 4px;
+}
+.history-error-header {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  margin-bottom: 0.5em;
+  flex-wrap: wrap;
+}
+.history-error-title {
+  font-family: var(--serif);
+  font-size: 12pt;
+  font-weight: 600;
+  color: #1a1a1a;
+  flex: 1;
+  min-width: 200px;
+}
+.error-source-badge {
+  display: inline-block;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0.25em 0.7em;
+  border-radius: 10px;
+  white-space: nowrap;
+  background: #888;
+  color: white;
+}
+.error-source-anthropic   { background: #d97706; }  /* amber — Anthropic brand-ish */
+.error-source-huggingface { background: #ff9d00; }  /* HF yellow */
+.error-source-ffmpeg      { background: #5b21b6; }  /* deep purple */
+.error-source-weasyprint  { background: #475569; }  /* slate */
+.error-source-network     { background: #2563eb; }  /* blue */
+.error-source-user        { background: #059669; }  /* teal — your input */
+.error-source-internal    { background: #c0392b; }  /* red — our bug */
+
+.history-error-detail {
+  margin: 0 0 0.8em;
+  font-size: 10.5pt;
+  color: #333;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.history-error-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em 1em;
+  margin-bottom: 0.6em;
+}
+.history-error-link {
+  font-size: 9.5pt;
+  color: #1a73e8;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 120ms;
+}
+.history-error-link:hover {
+  border-bottom-color: #1a73e8;
+}
+.history-error-link::after {
+  content: " ↗";
+  font-size: 9pt;
+  color: var(--muted);
+}
+.history-error-raw {
+  margin-top: 0.4em;
+}
+.history-error-raw summary {
+  font-size: 8.5pt;
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.history-error-raw summary:hover { color: var(--ink); }
+.history-error-raw pre {
+  margin: 0.5em 0 0;
+  padding: 0.7em 0.9em;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 8.5pt;
+  color: #555;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
 .history-actions {
   display: flex;
   gap: 0.5em;
